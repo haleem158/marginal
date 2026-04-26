@@ -1,0 +1,107 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #080808;
+  --surface: #0F0F0F;
+  --surface-raised: #141414;
+  --surface-overlay: #1A1A1A;
+  --border: rgba(255,255,255,0.06);
+  --border-active: rgba(255,255,255,0.12);
+
+  --primary: #00C2FF;
+  --primary-glow: rgba(0,194,255,0.15);
+  --primary-dim: rgba(0,194,255,0.06);
+
+  --efficiency-high: #00FF88;
+  --efficiency-mid: #FFB800;
+  --efficiency-low: #FF4455;
+
+  --agent-auctioneer: #A78BFA;
+  --agent-executor: #00C2FF;
+  --agent-auditor: #F59E0B;
+  --agent-treasury: #10B981;
+  --agent-memory: #EC4899;
+
+  --text-primary: #F5F5F5;
+  --text-secondary: #888888;
+  --text-tertiary: #555555;
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+
+* {
+  border-color: rgba(255,255,255,0.06);
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #080808;
+  color: #F5F5F5;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: #0F0F0F; }
+::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Ticker animation */
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-content { animation: ticker 40s linear infinite; }
+.ticker-content:hover { animation-play-state: paused; }
+
+/* Glow effects */
+.glow-blue { box-shadow: 0 0 20px rgba(0,194,255,0.15); }
+.glow-green { box-shadow: 0 0 20px rgba(0,255,136,0.15); }
+.glow-red { box-shadow: 0 0 20px rgba(255,68,85,0.15); }
+
+/* Score color utilities */
+.score-high { color: #00FF88; }
+.score-mid { color: #FFB800; }
+.score-low { color: #FF4455; }
+
+/* Pulse animation for live indicators */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+.pulse-live { animation: pulse-live 2s ease-in-out infinite; }
+.pulse-ending { animation: pulse-live 0.8s ease-in-out infinite; }
+
+/* Custom focus ring */
+*:focus-visible {
+  outline: 2px solid rgba(0,194,255,0.5);
+  outline-offset: 2px;
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+}
+
+/* Skeleton loading */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
