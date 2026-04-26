@@ -1,0 +1,27 @@
+node_modules/
+dist/
+cache/
+artifacts/
+.env
+*.env.local
+coverage/
+coverage.json
+typechain/
+typechain-types/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# OS
+.DS_Store
+Thumbs.db
