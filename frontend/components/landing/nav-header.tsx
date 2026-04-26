@@ -2,7 +2,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Menu, X, Zap } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
+import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
 
 const navGroups = [
@@ -35,9 +36,7 @@ export function NavHeader() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5">
           <div className="relative">
-            <div className="w-7 h-7 rounded-lg bg-[#00C2FF]/10 border border-[#00C2FF]/20 flex items-center justify-center">
-              <Zap size={14} className="text-[#00C2FF]" />
-            </div>
+            <Logo size={28} color="white" />
             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#00FF88]"
               style={{ animation: 'pulse-live 2s ease-in-out infinite' }} />
           </div>

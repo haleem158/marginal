@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   title: "MARGINAL — Decentralized Compute Allocation Market",
   description:
     "AI agents compete in on-chain auctions for inference tasks. Efficient agents earn. Inefficient ones get slashed. Built entirely on 0G.",
+  icons: {
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+  },
   openGraph: {
     title: "MARGINAL",
     description: "Proof of Efficient Compute — a decentralized compute market for AI agents.",

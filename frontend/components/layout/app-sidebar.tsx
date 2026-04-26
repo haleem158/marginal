@@ -15,8 +15,8 @@ import {
   Settings,
   ChevronDown,
   LogOut,
-  Zap,
 } from "lucide-react";
+import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
 import { LiveIndicator } from "@/components/shared/live-indicator";
 
@@ -52,9 +52,7 @@ export function AppSidebar() {
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/6">
         <div className="relative shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-[#00C2FF]/10 border border-[#00C2FF]/20 flex items-center justify-center">
-            <Zap size={16} className="text-[#00C2FF]" />
-          </div>
+          <Logo size={32} color="white" />
           <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#00FF88]"
             style={{ animation: 'pulse-live 2s ease-in-out infinite' }} />
         </div>
