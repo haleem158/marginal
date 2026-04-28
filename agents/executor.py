@@ -207,25 +207,43 @@ class ExecutorAgent(BaseAgent):
         return bid_amount
 
     async def _place_bid(self, task_id: int, bid_amount: int):
-        """Commit a sealed bid for task_id."""
+        """Commit a sealed bid for task_id.
+        
+        Retries up to MAX_BID_RETRIES times with exponential back-off. On each
+        retry the bid amount is escalated by BID_ESCALATION_PCT so we're more
+        likely to clear transient nonce / gas issues without lowering our bid.
+        """
+        MAX_BID_RETRIES    = 3
+        BID_ESCALATION_PCT = 0.02   # +2% per retry to break ties on retry
+
         salt = self.generate_salt()
         commitment = self.make_bid_commitment(bid_amount, salt)
+        current_bid = bid_amount
 
-        try:
-            # Send collateral = bid_amount (will be returned if loser)
-            self._send_tx(
-                self.auction_house.functions.placeBid(task_id, commitment),
-                value_wei=bid_amount,
-            )
-            self._pending_bids[task_id] = PendingBid(
-                task_id=task_id,
-                amount_wei=bid_amount,
-                salt=salt,
-                commitment=commitment,
-            )
-            logger.info("Bid committed | task=%d amount=%d wei", task_id, bid_amount)
-        except Exception as e:
-            logger.error("Bid commit failed task=%d: %s", task_id, e)
+        for attempt in range(1, MAX_BID_RETRIES + 1):
+            try:
+                self._send_tx(
+                    self.auction_house.functions.placeBid(task_id, commitment),
+                    value_wei=current_bid,
+                )
+                self._pending_bids[task_id] = PendingBid(
+                    task_id=task_id,
+                    amount_wei=current_bid,
+                    salt=salt,
+                    commitment=commitment,
+                )
+                logger.info("Bid committed | task=%d amount=%d wei attempt=%d", task_id, current_bid, attempt)
+                return
+            except Exception as e:
+                logger.warning("Bid attempt %d/%d failed task=%d: %s", attempt, MAX_BID_RETRIES, task_id, e)
+                if attempt < MAX_BID_RETRIES:
+                    # Escalate bid slightly and regenerate commitment
+                    current_bid = int(current_bid * (1 + BID_ESCALATION_PCT))
+                    salt = self.generate_salt()
+                    commitment = self.make_bid_commitment(current_bid, salt)
+                    await asyncio.sleep(2 ** attempt)   # back-off: 2s, 4s
+
+        logger.error("Bid permanently failed for task #%d after %d attempts", task_id, MAX_BID_RETRIES)
 
     # ── Bid reveal ────────────────────────────────────────────────────────────
 
