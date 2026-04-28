@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -11,9 +11,38 @@ import {
   ReferenceLine,
 } from "recharts";
 import { mockMarketEfficiency } from "@/lib/mock-data";
+import { indexer, SettlementRecord } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const tabs = ["24h", "6h", "1h"];
+
+interface ChartPoint { time: string; topQuartile: number; bottomQuartile: number; }
+
+/** Build hourly top/bottom quartile chart from raw settlements. */
+function buildChartData(records: SettlementRecord[], hours: number): ChartPoint[] {
+  const now = Date.now() / 1000;
+  const cutoff = now - hours * 3600;
+  const filtered = records.filter((r) => r.timestamp >= cutoff);
+  if (filtered.length < 2) return [];
+
+  // Group by hour bucket
+  const buckets: Record<number, number[]> = {};
+  for (const r of filtered) {
+    const bucket = Math.floor((r.timestamp - cutoff) / 3600);
+    if (!buckets[bucket]) buckets[bucket] = [];
+    buckets[bucket].push(r.efficiency_score / 10000);
+  }
+
+  return Object.entries(buckets)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([bucket, scores]) => {
+      const sorted = [...scores].sort((a, b) => a - b);
+      const q1 = sorted[Math.floor(sorted.length * 0.25)] ?? sorted[0];
+      const q3 = sorted[Math.floor(sorted.length * 0.75)] ?? sorted[sorted.length - 1];
+      const label = `${Number(bucket)}h ago`;
+      return { time: label, topQuartile: q3, bottomQuartile: q1 };
+    });
+}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -28,19 +57,51 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function EfficiencyChart() {
   const [activeTab, setActiveTab] = useState("24h");
+  const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
+  const [isLive, setIsLive] = useState(false);
 
-  const data =
+  useEffect(() => {
+    let active = true;
+    async function fetch() {
+      try {
+        const data = await indexer.getSettlements();
+        if (!active || !data?.length) return;
+        setSettlements(data);
+        setIsLive(true);
+      } catch { /* stay on mock */ }
+    }
+    fetch();
+    const id = setInterval(fetch, 20_000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
+
+  const hoursMap: Record<string, number> = { "1h": 1, "6h": 6, "24h": 24 };
+  const liveData = buildChartData(settlements, hoursMap[activeTab]);
+
+  const mockData =
     activeTab === "1h"
       ? mockMarketEfficiency.slice(-4)
       : activeTab === "6h"
       ? mockMarketEfficiency.slice(-6)
       : mockMarketEfficiency;
 
+  const data = isLive && liveData.length > 0 ? liveData : mockData;
+
   return (
     <div className="p-6 rounded-xl bg-white/2 border border-white/6 h-full">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-sm font-semibold text-[#F5F5F5]">Market Efficiency Over Time</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-[#F5F5F5]">Market Efficiency Over Time</h3>
+            <span className={cn(
+              "px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider",
+              isLive
+                ? "bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/20"
+                : "bg-white/4 text-[#555555] border border-white/8"
+            )}>
+              {isLive ? "● live" : "● mock"}
+            </span>
+          </div>
           <p className="text-xs text-[#555555] mt-0.5">Top vs Bottom Quartile Efficiency Scores</p>
         </div>
         <div className="flex gap-1 p-1 rounded-lg bg-white/4">
