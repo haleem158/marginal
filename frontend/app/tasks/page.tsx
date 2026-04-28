@@ -40,11 +40,28 @@ interface TaskStatus {
   revealDeadline?: number;
 }
 
-const recentTasks = [
-  { id: "4821", status: "live",   agent: "0x7f3a...c291", score: 0.94, cost: 142, time: "2m ago" },
-  { id: "4815", status: "scored", agent: "0xf7b5...d2e8", score: 0.88, cost: 94,  time: "15m ago" },
-  { id: "4809", status: "slashed",agent: "0x2e8c...4f17", score: 0.45, cost: 47,  time: "1h ago" },
-];
+const LS_KEY = "marginal:task_history";
+
+interface LocalTask {
+  id: number;
+  description: string;
+  computeUnits: number;
+  difficulty: number;
+  reserveWei: string;
+  submittedAt: number; // unix ms
+  txHash: string;
+}
+
+function loadHistory(): LocalTask[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "[]"); }
+  catch { return []; }
+}
+
+function saveHistory(tasks: LocalTask[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LS_KEY, JSON.stringify(tasks.slice(0, 20))); // keep last 20
+}
 
 export default function TasksPage() {
   const { address } = useAccount();
@@ -60,9 +77,13 @@ export default function TasksPage() {
   const [taskStatus,   setTaskStatus]   = useState<TaskStatus | null>(null);
   const [estimate,     setEstimate]     = useState<TaskEstimate | null>(null);
   const [estimating,   setEstimating]   = useState(false);
+  const [history,      setHistory]      = useState<LocalTask[]>([]);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const estimateRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load task history from localStorage on mount
+  useEffect(() => { setHistory(loadHistory()); }, []);
 
   // Poll the task state every 5 s once we have a task ID
   useEffect(() => {
@@ -144,6 +165,19 @@ export default function TasksPage() {
       await new Promise((r) => setTimeout(r, 600));
       setResult(response);
       setSubmitState("done");
+      // Persist to localStorage
+      const entry: LocalTask = {
+        id:           response.task_id,
+        description:  task.trim().slice(0, 100),
+        computeUnits: response.compute_units,
+        difficulty:   response.difficulty_score,
+        reserveWei:   response.reserve_price_wei,
+        submittedAt:  Date.now(),
+        txHash:       response.tx_hash,
+      };
+      const updated = [entry, ...loadHistory()];
+      saveHistory(updated);
+      setHistory(updated);
       setTimeout(() => setSubmitState("idle"), 4000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -480,36 +514,49 @@ export default function TasksPage() {
           </AnimatePresence>
         </div>
 
-        {/* Recent tasks */}
+        {/* Task History — persisted in localStorage */}
         <div className="mt-10">
-          <h3 className="text-sm font-semibold text-[#F5F5F5] mb-4">Your Recent Tasks</h3>
-          <div className="rounded-xl border border-white/6 overflow-hidden">
-            {recentTasks.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-4 px-4 py-3.5 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors"
-              >
-                <span className="font-mono text-sm text-[#F5F5F5]">#{t.id}</span>
-                <span className={cn(
-                  "px-2 py-0.5 rounded text-[10px] font-mono uppercase",
-                  t.status === "live"    && "bg-[#00C2FF]/10 text-[#00C2FF]",
-                  t.status === "scored"  && "bg-[#00FF88]/10 text-[#00FF88]",
-                  t.status === "slashed" && "bg-[#FF4455]/10 text-[#FF4455]",
-                )}>
-                  {t.status}
-                </span>
-                <span className="font-mono text-xs text-[#555555] flex-1">{t.agent}</span>
-                <span className={cn(
-                  "font-mono text-xs",
-                  t.score >= 0.8 ? "text-[#00FF88]" : t.score >= 0.5 ? "text-[#FFB800]" : "text-[#FF4455]"
-                )}>
-                  {t.score.toFixed(2)}
-                </span>
-                <span className="font-mono text-xs text-[#888888]">{t.cost} A0GI</span>
-                <span className="font-mono text-xs text-[#555555]">{t.time}</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-[#F5F5F5]">Your Task History</h3>
+            <span className="text-[10px] font-mono text-[#555555]">{history.length} tasks this browser</span>
           </div>
+          {history.length === 0 ? (
+            <div className="rounded-xl border border-white/6 px-4 py-8 text-center text-[#555555] text-xs">
+              No tasks submitted yet — submit your first task above.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-white/6 overflow-hidden">
+              <div className="grid grid-cols-[80px_1fr_90px_80px_70px] text-[10px] uppercase tracking-wider text-[#555555] px-4 py-2.5 border-b border-white/6 bg-white/1 font-mono">
+                <span>Task ID</span>
+                <span>Description</span>
+                <span>Compute</span>
+                <span>Difficulty</span>
+                <span>When</span>
+              </div>
+              {history.map((t) => (
+                <div
+                  key={t.id}
+                  className="grid grid-cols-[80px_1fr_90px_80px_70px] px-4 py-3 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors items-center"
+                >
+                  <a
+                    href={`${OG_EXPLORER}/tx/${t.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-sm text-[#00C2FF] hover:underline flex items-center gap-1"
+                  >
+                    #{t.id}
+                    <ExternalLink size={9} />
+                  </a>
+                  <span className="font-mono text-xs text-[#888888] truncate pr-3">{t.description}</span>
+                  <span className="font-mono text-xs text-[#F5F5F5]">{t.computeUnits.toLocaleString()} tokens</span>
+                  <span className="font-mono text-xs text-[#FFB800]">{t.difficulty}/100</span>
+                  <span className="font-mono text-xs text-[#555555]">
+                    {new Date(t.submittedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
