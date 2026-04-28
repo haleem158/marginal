@@ -1,20 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink, ChevronDown } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { mockHistoryEvents, HistoryEvent } from "@/lib/mock-data";
+import { indexer, SettlementRecord } from "@/lib/api";
 import { ScoreBadge } from "@/components/shared/score-badge";
+import { OG_EXPLORER } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
 const tabs = ["All Events", "Auction Results", "Reward Events", "Slash Events"];
-
-const tabFilters: Record<string, (e: HistoryEvent) => boolean> = {
-  "All Events":      () => true,
-  "Auction Results": (e) => e.type === "AUCTION_WON",
-  "Reward Events":   (e) => e.type === "REWARD_PAID",
-  "Slash Events":    (e) => e.type === "AGENT_SLASHED",
-};
 
 const eventStyles: Record<string, { label: string; color: string; bg: string; accent: string }> = {
   AUCTION_WON:    { label: "AUCTION WON", color: "#00C2FF", bg: "rgba(0,194,255,0.08)",  accent: "" },
@@ -24,11 +19,62 @@ const eventStyles: Record<string, { label: string; color: string; bg: string; ac
   MEMORY_WRITTEN: { label: "STORED",      color: "#EC4899", bg: "rgba(236,72,153,0.08)", accent: "border-l-2 border-l-[#EC4899]" },
 };
 
+// Normalise real SettlementRecord to the HistoryEvent shape used by the UI
+function settlementToHistory(s: SettlementRecord, idx: number): HistoryEvent {
+  const winningBidA0gi = Number(BigInt(s.winning_bid_wei)) / 1e18;
+  const isReward = s.efficiency_score >= 60;
+  return {
+    id:          idx,
+    type:        isReward ? "REWARD_PAID" : "AGENT_SLASHED",
+    taskId:      String(s.task_id),
+    agent:       s.executor
+      ? `${s.executor.slice(0, 6)}...${s.executor.slice(-4)}`
+      : "—",
+    score:       s.efficiency_score / 100,
+    computeUsed: s.compute_used,
+    amount:      isReward
+      ? parseFloat(winningBidA0gi.toFixed(4))
+      : -parseFloat(winningBidA0gi.toFixed(4)),
+    block:       String(s.block),
+    time:        new Date(s.timestamp * 1000).toLocaleTimeString(),
+    txHash:      "0x",          // txHash not in indexer record — shown as "—"
+    storageKey:  s.storage_pointer || undefined,
+    bidAmount:   parseFloat(winningBidA0gi.toFixed(4)),
+  };
+}
+
 export default function HistoryPage() {
   const [activeTab, setActiveTab] = useState("All Events");
   const [expanded,  setExpanded]  = useState<number | null>(null);
+  const [events,    setEvents]    = useState<HistoryEvent[]>(mockHistoryEvents);
+  const [isLive,    setIsLive]    = useState(false);
 
-  const filtered = mockHistoryEvents.filter(tabFilters[activeTab] ?? (() => true));
+  // Poll Memory Indexer /settlements every 10 s
+  useEffect(() => {
+    async function poll() {
+      try {
+        const records = await indexer.getSettlements();
+        if (records.length > 0) {
+          setEvents(records.map(settlementToHistory));
+          setIsLive(true);
+        }
+      } catch {
+        setIsLive(false);
+      }
+    }
+    poll();
+    const id = setInterval(poll, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const tabFilters: Record<string, (e: HistoryEvent) => boolean> = {
+    "All Events":      () => true,
+    "Auction Results": (e) => e.type === "AUCTION_WON",
+    "Reward Events":   (e) => e.type === "REWARD_PAID",
+    "Slash Events":    (e) => e.type === "AGENT_SLASHED",
+  };
+
+  const filtered = events.filter(tabFilters[activeTab] ?? (() => true));
 
   return (
     <motion.div
@@ -37,6 +83,26 @@ export default function HistoryPage() {
       transition={{ duration: 0.3 }}
       className="p-6"
     >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-[#F5F5F5]">Settlement History</h2>
+          <p className="text-[#555555] text-sm mt-1">
+            {isLive
+              ? "Live data from Memory Indexer (0G Storage Log)"
+              : "Showing mock data — start agents to see real settlements"}
+          </p>
+        </div>
+        <span className={cn(
+          "px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wider",
+          isLive
+            ? "bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/20"
+            : "bg-white/4 text-[#555555] border border-white/8"
+        )}>
+          {isLive ? "● LIVE" : "● MOCK"}
+        </span>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-xl bg-white/4 border border-white/6 w-fit mb-6">
         {tabs.map((tab) => (
@@ -117,13 +183,13 @@ export default function HistoryPage() {
                           <div>
                             <div className="text-[10px] text-[#555555] mb-1">Bid Amount</div>
                             <div className="font-mono text-sm text-[#F5F5F5]">
-                              {event.bidAmount} $MARG
+                              {event.bidAmount} A0GI
                             </div>
                           </div>
                           <div>
                             <div className="text-[10px] text-[#555555] mb-1">Second Price</div>
                             <div className="font-mono text-sm text-[#F5F5F5]">
-                              {event.secondPrice} $MARG
+                              {event.secondPrice} A0GI
                             </div>
                           </div>
                         </>
@@ -139,12 +205,12 @@ export default function HistoryPage() {
                       <div>
                         <div className="text-[10px] text-[#555555] mb-1">Transaction</div>
                         <a
-                          href={`https://scan.0g.ai/tx/${event.txHash}`}
+                          href={`${OG_EXPLORER}/tx/${event.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 font-mono text-xs text-[#00C2FF] hover:underline"
                         >
-                          {event.txHash.slice(0, 14)}...
+                          {event.txHash === "0x" ? "on 0G Chain ↗" : `${event.txHash.slice(0, 14)}...`}
                           <ExternalLink size={10} />
                         </a>
                       </div>

@@ -146,73 +146,138 @@ class BaseAgent:
         return text, tokens
 
     # ── 0G Storage ───────────────────────────────────────────────────────────
+    # Primary: 0G Storage node (https://storage.0g.ai or self-hosted)
+    # Fallback: Memory Indexer cache at localhost:8001 (always available in local mode)
+
+    _INDEXER_URL = "http://localhost:8001"
 
     async def storage_kv_write(self, key: str, value: dict) -> bool:
         """Write agent state to 0G Storage KV layer."""
         payload = json.dumps(value)
         url = f"{self.cfg.storage_node_url}/kv/{self.cfg.kv_bucket}/{key}"
-        async with aiohttp.ClientSession() as session:
-            async with session.put(
-                url,
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Api-Key": self.cfg.compute_api_key,
-                },
-            ) as resp:
-                if resp.status not in (200, 201):
-                    self.logger.warning("KV write failed for key=%s status=%d", key, resp.status)
-                    return False
-                return True
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(
+                    url,
+                    data=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Api-Key": self.cfg.compute_api_key,
+                    },
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    if resp.status in (200, 201):
+                        return True
+        except Exception:
+            pass
+
+        # Fallback: write to Memory Indexer storage
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self._INDEXER_URL}/storage",
+                    json={"__kv_key": key, **value},
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    return resp.status == 200
+        except Exception as e:
+            self.logger.warning("KV write failed (key=%s): %s", key, e)
+        return False
 
     async def storage_kv_read(self, key: str) -> Optional[dict]:
         """Read agent state from 0G Storage KV layer."""
         url = f"{self.cfg.storage_node_url}/kv/{self.cfg.kv_bucket}/{key}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                headers={"X-Api-Key": self.cfg.compute_api_key},
-            ) as resp:
-                if resp.status == 404:
-                    return None
-                if resp.status != 200:
-                    self.logger.warning("KV read failed key=%s status=%d", key, resp.status)
-                    return None
-                return await resp.json()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={"X-Api-Key": self.cfg.compute_api_key},
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+        except Exception:
+            pass
+        return None
 
     async def storage_log_append(self, entry: dict) -> Optional[str]:
         """
         Append an immutable record to 0G Storage Log layer.
-        Returns the log entry ID (used as storage pointer in contract).
+        Returns the log entry pointer (committed on-chain in submitResult).
+        Falls back to Memory Indexer when 0G Storage is unreachable.
         """
         payload = json.dumps(entry)
         url = f"{self.cfg.storage_node_url}/log/{self.cfg.log_stream_id}"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url,
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Api-Key": self.cfg.compute_api_key,
-                },
-            ) as resp:
-                if resp.status not in (200, 201):
-                    self.logger.warning("Log append failed status=%d", resp.status)
-                    return None
-                result = await resp.json()
-                return result.get("id") or result.get("pointer")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    data=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Api-Key": self.cfg.compute_api_key,
+                    },
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    if resp.status in (200, 201):
+                        result = await resp.json()
+                        ptr = result.get("id") or result.get("pointer")
+                        if ptr:
+                            return ptr
+        except Exception:
+            pass
+
+        # Fallback: Memory Indexer storage (localhost:8001)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self._INDEXER_URL}/storage",
+                    json=entry,
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        self.logger.info(
+                            "Stored via Memory Indexer: %s", result.get("pointer")
+                        )
+                        return result.get("pointer")
+        except Exception as e:
+            self.logger.warning("Memory Indexer storage write failed: %s", e)
+
+        return None
 
     async def storage_log_read(self, pointer: str) -> Optional[dict]:
-        """Read a specific log entry from 0G Storage."""
+        """Read a log entry by its pointer. Handles both 0G Storage and local pointers."""
+        # Memory Indexer storage
+        if pointer.startswith("mgidx:"):
+            sid = pointer[len("mgidx:"):]
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{self._INDEXER_URL}/storage/{sid}",
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+            except Exception as e:
+                self.logger.error("Indexer storage read failed (ptr=%s): %s", pointer, e)
+            return None
+
+        # 0G Storage node
         url = f"{self.cfg.storage_node_url}/log/{self.cfg.log_stream_id}/{pointer}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                headers={"X-Api-Key": self.cfg.compute_api_key},
-            ) as resp:
-                if resp.status != 200:
-                    return None
-                return await resp.json()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={"X-Api-Key": self.cfg.compute_api_key},
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+        except Exception as e:
+            self.logger.error("0G Storage read failed (ptr=%s): %s", pointer, e)
+
+        return None
 
     # ── Utility ───────────────────────────────────────────────────────────────
 

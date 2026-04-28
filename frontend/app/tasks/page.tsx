@@ -1,23 +1,44 @@
 ﻿"use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Loader2, ChevronDown, ExternalLink } from "lucide-react";
+import { Check, Loader2, ChevronDown, ExternalLink, Radio } from "lucide-react";
 import { useAccount } from "wagmi";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import type { TaskSubmitResponse } from "@/lib/api";
+import type { TaskSubmitResponse, TaskEstimate } from "@/lib/api";
 import { OG_EXPLORER } from "@/lib/contracts";
 
 type SubmitState = "idle" | "estimating" | "opening" | "done" | "error";
 
 const stateMessages: Record<SubmitState, string> = {
-  idle:       "Open Auction â†’",
+  idle:       "Open Auction →",
   estimating: "Estimating compute...",
   opening:    "Opening on-chain auction...",
   done:       "Auction Opened!",
   error:      "Submission Failed",
 };
+
+// On-chain task states 0-5
+const TASK_PHASES = [
+  { state: 0, label: "Bid Phase",    desc: "Executors are committing bids" },
+  { state: 1, label: "Reveal Phase", desc: "Bids are being revealed" },
+  { state: 2, label: "Executing",    desc: "Winner is running inference" },
+  { state: 3, label: "Scored",       desc: "Auditor has evaluated output" },
+  { state: 4, label: "Settled",      desc: "Reward / slash distributed" },
+  { state: 5, label: "Refunded",     desc: "No bids met reserve price" },
+];
+
+interface TaskStatus {
+  state: number;
+  winner?: string;
+  winningBid?: number;
+  computeUsed?: number;
+  storagePointer?: string;
+  bidCount?: number;
+  bidDeadline?: number;
+  revealDeadline?: number;
+}
 
 const recentTasks = [
   { id: "4821", status: "live",   agent: "0x7f3a...c291", score: 0.94, cost: 142, time: "2m ago" },
@@ -36,10 +57,69 @@ export default function TasksPage() {
   const [submitState,  setSubmitState]  = useState<SubmitState>("idle");
   const [errorMsg,     setErrorMsg]     = useState("");
   const [result,       setResult]       = useState<TaskSubmitResponse | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [taskStatus,   setTaskStatus]   = useState<TaskStatus | null>(null);
+  const [estimate,     setEstimate]     = useState<TaskEstimate | null>(null);
+  const [estimating,   setEstimating]   = useState(false);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const estimateRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Poll the task state every 5 s once we have a task ID
+  useEffect(() => {
+    if (!result?.task_id) return;
+
+    async function poll() {
+      try {
+        const t = await api.getTask(result!.task_id);
+        setTaskStatus({
+          state:          t.state,
+          winner:         t.winner,
+          winningBid:     t.winningBid ? Number(BigInt(t.winningBid)) / 1e18 : undefined,
+          computeUsed:    t.computeUnitsUsed,
+          storagePointer: t.storagePointer,
+          bidCount:       t.bidCount,
+          bidDeadline:    t.bidDeadline,
+          revealDeadline: t.revealDeadline,
+        });
+        // Stop polling once settled or refunded
+        if (t.state >= 4 && pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      } catch {
+        // silently ignore — API may be momentarily unavailable
+      }
+    }
+
+    poll();
+    pollRef.current = setInterval(poll, 5_000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [result?.task_id]);
 
   const estimatedTokens = Math.round(task.length * 1.3);
-  const estimatedCost   = Math.round(estimatedTokens * 0.034);
+  const estimatedCost   = estimate ? estimate.total_cost_a0gi : Math.round(estimatedTokens * 0.034) / 1000;
+
+  // Debounced cost estimate — calls /tasks/estimate 1s after user stops typing
+  const triggerEstimate = useCallback((description: string) => {
+    if (estimateRef.current) clearTimeout(estimateRef.current);
+    if (description.trim().length < 20) { setEstimate(null); return; }
+    estimateRef.current = setTimeout(async () => {
+      try {
+        setEstimating(true);
+        const est = await api.estimateTask({
+          description: description.trim(),
+          submitter_address: "0x0000000000000000000000000000000000000000",
+        });
+        setEstimate(est);
+      } catch {
+        setEstimate(null); // agents offline
+      } finally {
+        setEstimating(false);
+      }
+    }, 1000);
+  }, []);
 
   function autoResize() {
     if (textareaRef.current) {
@@ -104,7 +184,7 @@ export default function TasksPage() {
             <textarea
               ref={textareaRef}
               value={task}
-              onChange={(e) => { setTask(e.target.value); autoResize(); }}
+              onChange={(e) => { setTask(e.target.value); autoResize(); triggerEstimate(e.target.value); }}
               placeholder="Summarize this research paper and extract the key findings on compute efficiency..."
               rows={4}
               className="w-full bg-transparent text-sm text-[#F5F5F5] placeholder:text-[#333333] outline-none resize-none leading-relaxed"
@@ -167,8 +247,21 @@ export default function TasksPage() {
               </span>
             </div>
             <p className="text-xs font-mono text-[#555555] mt-2">
-              Estimated cost at market rate:{" "}
-              <span className="text-[#00C2FF]">{estimatedCost} $MARG</span>
+              {estimating ? (
+                <span className="text-[#555555] animate-pulse">Estimating cost…</span>
+              ) : estimate ? (
+                <>
+                  On-chain estimate:{" "}
+                  <span className="text-[#00C2FF]">{estimate.total_cost_a0gi.toFixed(6)} A0GI</span>
+                  <span className="ml-2 text-[#444444]">({estimate.compute_units} units · difficulty {estimate.difficulty})</span>
+                </>
+              ) : (
+                <>
+                  Estimated cost at market rate:{" "}
+                  <span className="text-[#00C2FF]">{estimatedCost} A0GI</span>
+                  <span className="ml-1.5 text-[#444444]">(rough)</span>
+                </>
+              )}
             </p>
           </div>
 
@@ -247,39 +340,141 @@ export default function TasksPage() {
             <p className="text-xs text-[#FF4455] font-mono px-1">{errorMsg}</p>
           )}
 
-          {/* Success result card */}
+          {/* Success result card + live status tracker */}
           <AnimatePresence>
             {result && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="p-5 rounded-xl bg-[#00FF88]/5 border border-[#00FF88]/20 space-y-3"
+                className="space-y-4"
               >
-                <p className="text-xs text-[#00FF88] font-semibold uppercase tracking-wider">
-                  Auction Opened On-Chain
-                </p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs font-mono">
-                  <span className="text-[#555555]">Task ID</span>
-                  <span className="text-[#F5F5F5]">#{result.task_id}</span>
-                  <span className="text-[#555555]">Compute Units</span>
-                  <span className="text-[#00C2FF]">{result.compute_units.toLocaleString()}</span>
-                  <span className="text-[#555555]">Difficulty</span>
-                  <span className="text-[#FFB800]">{result.difficulty_score}/100</span>
-                  <span className="text-[#555555]">Reserve Price</span>
-                  <span className="text-[#F5F5F5]">{reserveEth} A0GI</span>
-                  <span className="text-[#555555]">Bid Deadline</span>
-                  <span className="text-[#F5F5F5]">{bidDeadlineDate}</span>
+                {/* Static submission details */}
+                <div className="p-5 rounded-xl bg-[#00FF88]/5 border border-[#00FF88]/20 space-y-3">
+                  <p className="text-xs text-[#00FF88] font-semibold uppercase tracking-wider">
+                    Auction Opened On-Chain
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs font-mono">
+                    <span className="text-[#555555]">Task ID</span>
+                    <span className="text-[#F5F5F5]">#{result.task_id}</span>
+                    <span className="text-[#555555]">Compute Units</span>
+                    <span className="text-[#00C2FF]">{result.compute_units.toLocaleString()}</span>
+                    <span className="text-[#555555]">Difficulty</span>
+                    <span className="text-[#FFB800]">{result.difficulty_score}/100</span>
+                    <span className="text-[#555555]">Reserve Price</span>
+                    <span className="text-[#F5F5F5]">{reserveEth} A0GI</span>
+                    <span className="text-[#555555]">Bid Deadline</span>
+                    <span className="text-[#F5F5F5]">{bidDeadlineDate}</span>
+                  </div>
+                  <a
+                    href={`${OG_EXPLORER}/tx/${result.tx_hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-mono text-[#555555] hover:text-[#00C2FF] transition-colors"
+                  >
+                    {result.tx_hash.slice(0, 18)}...
+                    <ExternalLink size={10} />
+                  </a>
                 </div>
-                <a
-                  href={`${OG_EXPLORER}/tx/${result.tx_hash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[10px] font-mono text-[#555555] hover:text-[#00C2FF] transition-colors"
-                >
-                  {result.tx_hash.slice(0, 18)}...
-                  <ExternalLink size={10} />
-                </a>
+
+                {/* Live phase tracker */}
+                <div className="p-5 rounded-xl bg-white/2 border border-white/6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Radio size={12} className="text-[#00C2FF] animate-pulse" />
+                    <span className="text-xs font-semibold text-[#F5F5F5] uppercase tracking-wider">
+                      Live Task Status
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {TASK_PHASES.map((phase, i) => {
+                      const currentState = taskStatus?.state ?? 0;
+                      // state 5 = refunded — show only the refund phase
+                      const isRefund = currentState === 5;
+                      if (isRefund && phase.state !== 5) return null;
+                      if (isRefund && phase.state === 5) {
+                        return (
+                          <div key={phase.state} className="flex items-start gap-3">
+                            <div className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center bg-[#6B7280]/20 border border-[#6B7280]/40 shrink-0">
+                              <span className="text-[8px] text-[#6B7280]">R</span>
+                            </div>
+                            <div>
+                              <p className="text-xs font-mono text-[#6B7280]">{phase.label}</p>
+                              <p className="text-[11px] text-[#555555]">{phase.desc}</p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      // Normal phases 0–4
+                      if (phase.state === 5) return null;
+                      const isDone    = currentState > phase.state;
+                      const isActive  = currentState === phase.state;
+                      return (
+                        <div key={phase.state} className="flex items-start gap-3">
+                          <div className={cn(
+                            "mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors",
+                            isDone   && "bg-[#00FF88]/20 border border-[#00FF88]/40",
+                            isActive && "bg-[#00C2FF]/20 border border-[#00C2FF]/40",
+                            !isDone && !isActive && "border border-white/10 bg-white/2",
+                          )}>
+                            {isDone ? (
+                              <Check size={10} className="text-[#00FF88]" />
+                            ) : isActive ? (
+                              <Loader2 size={10} className="text-[#00C2FF] animate-spin" />
+                            ) : (
+                              <span className="text-[8px] font-mono text-[#333333]">{i + 1}</span>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className={cn(
+                              "text-xs font-mono",
+                              isDone   && "text-[#00FF88]",
+                              isActive && "text-[#00C2FF]",
+                              !isDone && !isActive && "text-[#333333]",
+                            )}>
+                              {phase.label}
+                            </p>
+                            {isActive && (
+                              <p className="text-[11px] text-[#555555] mt-0.5">{phase.desc}</p>
+                            )}
+                            {/* Live bid count during bid phase */}
+                            {phase.state === 0 && isActive && (taskStatus?.bidCount ?? 0) > 0 && (
+                              <p className="text-[11px] font-mono text-[#00C2FF] mt-0.5">
+                                {taskStatus!.bidCount} executor{taskStatus!.bidCount === 1 ? "" : "s"} bid
+                              </p>
+                            )}
+                            {/* Bid count once bid phase done */}
+                            {phase.state === 0 && isDone && (
+                              <p className="text-[11px] font-mono text-[#555555] mt-0.5">
+                                {taskStatus?.bidCount ?? "?"} bids received
+                              </p>
+                            )}
+                            {isDone && phase.state === 2 && taskStatus?.winner && (
+                              <p className="text-[11px] font-mono text-[#555555] mt-0.5">
+                                Winner: {taskStatus.winner.slice(0, 6)}...{taskStatus.winner.slice(-4)}
+                                {taskStatus.winningBid ? ` · ${taskStatus.winningBid.toFixed(4)} A0GI` : ""}
+                              </p>
+                            )}
+                            {isDone && phase.state === 3 && taskStatus?.computeUsed && (
+                              <p className="text-[11px] font-mono text-[#555555] mt-0.5">
+                                Compute used: {taskStatus.computeUsed.toLocaleString()} tokens
+                              </p>
+                            )}
+                            {isDone && phase.state === 4 && taskStatus?.storagePointer && (
+                              <p className="text-[11px] font-mono text-[#555555] mt-0.5 truncate">
+                                Storage: {taskStatus.storagePointer}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {!taskStatus && (
+                    <p className="text-[11px] text-[#555555] mt-3 font-mono">
+                      Polling chain every 5 s…
+                    </p>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -310,7 +505,7 @@ export default function TasksPage() {
                 )}>
                   {t.score.toFixed(2)}
                 </span>
-                <span className="font-mono text-xs text-[#888888]">{t.cost} $MARG</span>
+                <span className="font-mono text-xs text-[#888888]">{t.cost} A0GI</span>
                 <span className="font-mono text-xs text-[#555555]">{t.time}</span>
               </div>
             ))}

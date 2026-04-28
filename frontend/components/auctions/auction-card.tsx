@@ -95,7 +95,7 @@ export function AuctionCard({ auction, onBid }: AuctionCardProps) {
           <div className="text-[10px] text-[#555555] mb-0.5">Current Bid</div>
           <div className="font-mono text-lg font-bold text-[#00C2FF]">
             {auction.currentBid}{" "}
-            <span className="text-xs font-normal text-[#555555]">$MARG</span>
+            <span className="text-xs font-normal text-[#555555]">A0GI</span>
           </div>
         </div>
         <div className="text-right">
@@ -109,7 +109,7 @@ export function AuctionCard({ auction, onBid }: AuctionCardProps) {
       {/* Reward pool */}
       <div className="text-[11px] text-[#555555] font-mono mb-4">
         Est. reward pool:{" "}
-        <span className="text-[#00FF88]">{auction.rewardPool} $MARG</span>
+        <span className="text-[#00FF88]">{auction.rewardPool} A0GI</span>
       </div>
 
       {/* CTA */}

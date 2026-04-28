@@ -1,9 +1,10 @@
 /**
- * api.ts — REST client for the MARGINAL Auctioneer FastAPI server.
- * Base URL defaults to localhost:8000; override via NEXT_PUBLIC_AUCTIONEER_URL.
+ * api.ts — REST client for the MARGINAL Auctioneer (port 8000) and
+ * Memory Indexer (port 8001) FastAPI servers.
  */
 
-const BASE = (process.env.NEXT_PUBLIC_AUCTIONEER_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const BASE    = (process.env.NEXT_PUBLIC_AUCTIONEER_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const IDX_BASE = (process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:8001").replace(/\/$/, "");
 
 // ── Types mirrored from auctioneer.py ────────────────────────────────────────
 
@@ -37,6 +38,8 @@ export interface TaskState {
   winningBid: string;
   highestBid: string;
   bidCount: number;
+  computeUnitsUsed?: number;
+  storagePointer?: string;
 }
 
 export interface ActiveTasksResponse {
@@ -50,7 +53,30 @@ export interface HealthResponse {
   agent: string;
 }
 
-// ── Fetch helper ─────────────────────────────────────────────────────────────
+export interface RecentEvent {
+  id: number;
+  type: string;
+  taskId: string;
+  agent: string;
+  amount: number;
+  state: number;
+  description: string;
+}
+
+export interface RecentEventsResponse {
+  events: RecentEvent[];
+}
+
+
+
+export interface TaskEstimate {
+  compute_units: number;
+  difficulty: number;
+  reserve_price_wei: string;
+  task_fee_wei: string;
+  total_cost_wei: string;
+  total_cost_a0gi: number;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -94,5 +120,116 @@ export const api = {
   /** Fetch a single task by ID. */
   getTask(id: number): Promise<TaskState> {
     return request<TaskState>(`/tasks/${id}`);
+  },
+
+  /** Fetch the last 20 tasks as live feed events. */
+  getRecentEvents(): Promise<RecentEventsResponse> {
+    return request<RecentEventsResponse>("/tasks/recent");
+  },
+
+  /**
+   * Estimate compute cost without submitting on-chain.
+   * Use for live cost preview as the user types.
+   */
+  estimateTask(body: TaskSubmitRequest): Promise<TaskEstimate> {
+    return request<TaskEstimate>("/tasks/estimate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+};
+
+// ── Memory Indexer client (port 8001) ─────────────────────────────────────
+
+function idxRequest<T>(path: string): Promise<T> {
+  return fetch(`${IDX_BASE}${path}`)
+    .then((res) => {
+      if (!res.ok) throw new Error(`Indexer ${res.status}`);
+      return res.json() as Promise<T>;
+    });
+}
+
+export interface SettlementRecord {
+  task_id: number;
+  executor: string;
+  description: string;
+  compute_estimated: number;
+  difficulty: number;
+  winning_bid_wei: string;
+  compute_used: number;
+  efficiency_score: number;
+  storage_pointer: string;
+  timestamp: number;
+  block: number;
+}
+
+export interface IndexerStats {
+  total_tasks_completed: number;
+  total_settled: number;
+  current_epoch: number;
+  indexed_agents: number;
+  log_entries: number;
+  last_block: number;
+}
+
+export interface IndexerAgent {
+  address: string;
+  total_stake_wei: string;
+  lifetime_rewards_wei: string;
+  lifetime_slashed_wei: string;
+  tasks_completed: number;
+  /** 0–10000, divide by 10000 for 0.0–1.0 */
+  efficiency_score: number;
+  nft_token_id: number;
+  last_updated: number;
+  latest_log_pointer?: string;
+  last_task_state?: string;
+}
+
+export interface AgentHistoryPoint {
+  epoch: number;
+  score: number;
+  task_id: number;
+  timestamp: number;
+}
+
+export interface NetworkMetrics {
+  avg_efficiency: number;
+  total_compute_used: number;
+  total_rewards_a0gi: number;
+  total_slashed_a0gi: number;
+  active_agents: number;
+  tasks_this_epoch: number;
+}
+
+export const indexer = {
+  /** All settled tasks — newest first. */
+  getSettlements(): Promise<SettlementRecord[]> {
+    return idxRequest<SettlementRecord[]>("/settlements");
+  },
+
+  /** All known agents with live KV state. */
+  getAgents(): Promise<IndexerAgent[]> {
+    return idxRequest<IndexerAgent[]>("/agents");
+  },
+
+  /** Single agent by address — fetches from chain if not cached. */
+  getAgent(address: string): Promise<IndexerAgent> {
+    return idxRequest<IndexerAgent>(`/agents/${address}`);
+  },
+
+  /** Per-agent efficiency history (last N settled tasks for that agent). */
+  getAgentHistory(address: string): Promise<AgentHistoryPoint[]> {
+    return idxRequest<AgentHistoryPoint[]>(`/agents/${address}/history`);
+  },
+
+  /** Network stats (task count, epoch, etc.). */
+  getStats(): Promise<IndexerStats> {
+    return idxRequest<IndexerStats>("/stats");
+  },
+
+  /** Aggregate network metrics for the dashboard. */
+  getMetrics(): Promise<NetworkMetrics> {
+    return idxRequest<NetworkMetrics>("/metrics");
   },
 };

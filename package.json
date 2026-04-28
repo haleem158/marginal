@@ -7,8 +7,8 @@
     "test": "hardhat test",
     "deploy:testnet": "hardhat run scripts/deploy.ts --network og-testnet",
     "deploy:mainnet": "hardhat run scripts/deploy.ts --network og-mainnet",
-    "seed": "hardhat run scripts/seed.ts --network og-testnet",
-    "verify": "hardhat run scripts/verify.ts --network og-testnet",
+    "seed": "hardhat run scripts/seed.ts --network og-mainnet",
+    "verify": "hardhat run scripts/verify.ts --network og-mainnet",
     "node": "hardhat node"
   },
   "devDependencies": {

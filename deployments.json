@@ -1,11 +1,11 @@
 {
-  "network": "og-testnet",
-  "chainId": 16602,
+  "network": "og-mainnet",
+  "chainId": 16661,
   "deployer": "0xeDd32FC3030051909Cc6ad5e587C4f5F390249e6",
-  "timestamp": "2026-04-23T23:52:07.173Z",
+  "timestamp": "2026-04-28T10:30:46.700Z",
   "contracts": {
-    "StakeVault": "0x67395dE01D70CC1158d5F5aF3BeF9047827b6991",
-    "AuctionHouse": "0xe2119bf943999647A8C5EA025Ea13C98c020A39F",
-    "MarginalNFT": "0x17758a3324B65FEbDccDdf3659A4eDD5487d861A"
+    "StakeVault": "0xe2119bf943999647A8C5EA025Ea13C98c020A39F",
+    "AuctionHouse": "0x17758a3324B65FEbDccDdf3659A4eDD5487d861A",
+    "MarginalNFT": "0xa17931723B7fAED34F8532a95F8b62DD27a06102"
   }
 }

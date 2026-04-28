@@ -205,7 +205,7 @@ export function AppSidebar() {
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[10px] text-[#00FF88] font-mono">Score: 0.94</span>
                   <span className="text-[10px] text-[#555555] font-mono">·</span>
-                  <span className="text-[10px] text-[#888888] font-mono">12,400 $MARG</span>
+                  <span className="text-[10px] text-[#888888] font-mono">12,400 A0GI</span>
                 </div>
               </motion.div>
             )}

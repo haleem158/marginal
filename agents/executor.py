@@ -48,10 +48,10 @@ class ExecutorAgent(BaseAgent):
     Produce the highest-quality, most accurate response you can. Be concise but complete.
     If the task is code, produce working, idiomatic code. If analysis, be rigorous."""
 
-    def __init__(self, agent_id_suffix: str = "001"):
-        cfg = load_config("executor")
+    def __init__(self, executor_index: int = 1):
+        cfg = load_config("executor", executor_index=executor_index)
         super().__init__(cfg, "executor")
-        self.agent_id_suffix = agent_id_suffix
+        self.executor_index = executor_index
 
         # Track pending bids (taskId → PendingBid)
         self._pending_bids: dict[int, PendingBid] = {}
@@ -343,6 +343,6 @@ class ExecutorAgent(BaseAgent):
 
 if __name__ == "__main__":
     import sys
-    suffix = sys.argv[1] if len(sys.argv) > 1 else "001"
-    agent = ExecutorAgent(agent_id_suffix=suffix)
+    index = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    agent = ExecutorAgent(executor_index=index)
     agent.start()

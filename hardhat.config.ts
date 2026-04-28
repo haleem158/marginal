@@ -43,7 +43,7 @@ const config: HardhatUserConfig = {
     },
     "og-mainnet": {
       url: process.env.OG_MAINNET_RPC || "https://evmrpc.0g.ai",
-      chainId: 16601,
+      chainId: 16661,
       accounts: [PRIVATE_KEY],
       gasPrice: "auto",
     },

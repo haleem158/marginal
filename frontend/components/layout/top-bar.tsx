@@ -45,7 +45,7 @@ export function TopBar() {
         {/* Network badge */}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#00FF88]/8 border border-[#00FF88]/20">
           <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
-          <span className="text-[11px] font-mono text-[#00FF88]">0G Testnet</span>
+          <span className="text-[11px] font-mono text-[#00FF88]">0G Mainnet</span>
         </div>
 
         {/* Wallet connect */}

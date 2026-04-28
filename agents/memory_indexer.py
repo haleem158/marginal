@@ -301,12 +301,37 @@ class MemoryIndexerAgent(BaseAgent):
     async def _serve_cache_api(self):
         """
         Lightweight FastAPI serving the indexed state for the frontend dashboard.
+        Also serves as local Storage backend (KV + Log) when 0G Storage is unreachable.
         Runs on port 8001.
         """
-        from fastapi import FastAPI
+        from fastapi import FastAPI, HTTPException, Request
         import uvicorn
+        import uuid
 
         api = FastAPI(title="MARGINAL Memory Indexer Cache", version="1.0.0")
+
+        # ── Storage backend (KV + Log) ─────────────────────────────────────
+        # Used by executor (write) and auditor (read) when 0G Storage is offline.
+        # Pointer format: "mgidx:<uuid8>"
+        _storage: dict[str, dict] = {}
+
+        @api.post("/storage")
+        async def storage_write(request: Request):
+            body = await request.json()
+            sid  = str(uuid.uuid4())[:8]
+            _storage[sid] = body
+            ptr = f"mgidx:{sid}"
+            logger.info("Storage write: %s", ptr)
+            return {"id": sid, "pointer": ptr}
+
+        @api.get("/storage/{sid}")
+        async def storage_read(sid: str):
+            data = _storage.get(sid)
+            if not data:
+                raise HTTPException(status_code=404, detail="Not found")
+            return data
+
+        # ── Agent cache API ────────────────────────────────────────────────
 
         @api.get("/agents")
         async def get_agents():
@@ -324,6 +349,48 @@ class MemoryIndexerAgent(BaseAgent):
         @api.get("/settlements")
         async def get_settlements():
             return list(reversed(self._task_log_cache))
+
+        @api.get("/agents/{address}/history")
+        async def get_agent_history(address: str):
+            """Per-agent efficiency score history derived from the task log."""
+            history = [
+                {
+                    "epoch":     i,
+                    "score":     entry["efficiency_score"] / 10000,
+                    "task_id":   entry["task_id"],
+                    "timestamp": entry["timestamp"],
+                }
+                for i, entry in enumerate(self._task_log_cache)
+                if entry.get("executor", "").lower() == address.lower()
+            ]
+            return history
+
+        @api.get("/metrics")
+        async def get_metrics():
+            """Aggregate network metrics for the dashboard."""
+            agents = list(self._agent_state_cache.values())
+            scores = [a["efficiency_score"] for a in agents if "efficiency_score" in a]
+            avg_eff = (sum(scores) / len(scores) / 10000) if scores else 0.0
+
+            total_compute = sum(
+                e.get("compute_used", 0) for e in self._task_log_cache
+            )
+            total_rewards = sum(
+                int(a.get("lifetime_rewards_wei", 0)) for a in agents
+            )
+            total_slashed = sum(
+                int(a.get("lifetime_slashed_wei", 0)) for a in agents
+            )
+            # tasks in current epoch (last 200 entries or all if fewer)
+            epoch_window = self._task_log_cache[-200:]
+            return {
+                "avg_efficiency":      round(avg_eff, 4),
+                "total_compute_used":  total_compute,
+                "total_rewards_a0gi":  round(total_rewards / 1e18, 6),
+                "total_slashed_a0gi":  round(total_slashed / 1e18, 6),
+                "active_agents":       len(agents),
+                "tasks_this_epoch":    len(epoch_window),
+            }
 
         @api.get("/stats")
         async def get_stats():

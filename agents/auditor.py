@@ -219,7 +219,11 @@ class AuditorAgent(BaseAgent):
     # ── Storage & API ─────────────────────────────────────────────────────────
 
     async def _fetch_output(self, storage_pointer: str, task_id: int) -> Optional[str]:
-        """Fetch executor's output from 0G Storage Log."""
+        """Fetch executor's output from 0G Storage Log or Memory Indexer."""
+        if not storage_pointer:
+            logger.warning("Task #%d has empty storage pointer", task_id)
+            return None
+
         if storage_pointer.startswith("local:"):
             logger.warning("Task #%d used local fallback pointer — cannot verify output", task_id)
             return None

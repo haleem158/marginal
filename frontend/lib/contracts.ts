@@ -10,16 +10,16 @@ export const OG_EXPLORER           = process.env.NEXT_PUBLIC_OG_EXPLORER || "htt
 
 // ── Chain definition ─────────────────────────────────────────────────────────
 export const ogTestnet = {
-  id:           Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 16602),
-  name:         "0G Chain Testnet",
+  id:           Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 16661),
+  name:         "0G Chain Mainnet",
   nativeCurrency: { name: "A0GI", symbol: "A0GI", decimals: 18 },
   rpcUrls: {
-    default: { http: [process.env.NEXT_PUBLIC_RPC_URL || "https://evmrpc-testnet.0g.ai"] },
+    default: { http: [process.env.NEXT_PUBLIC_RPC_URL || "https://evmrpc.0g.ai"] },
   },
   blockExplorers: {
     default: { name: "0G Explorer", url: OG_EXPLORER },
   },
-  testnet: true,
+  testnet: false,
 } as const;
 
 // ── AuctionHouse ABI (UI-relevant subset) ─────────────────────────────────────
@@ -190,6 +190,47 @@ export const STAKE_VAULT_ABI = [
     stateMutability: "payable",
     inputs: [],
     outputs: [],
+  },
+  {
+    name: "depositStake",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    name: "withdrawStake",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    name: "minStake",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    name: "RewardDistributed",
+    type: "event",
+    inputs: [
+      { name: "agent",           type: "address", indexed: true },
+      { name: "taskId",          type: "uint256", indexed: true },
+      { name: "reward",          type: "uint256" },
+      { name: "efficiencyScore", type: "uint256" },
+    ],
+  },
+  {
+    name: "AgentSlashed",
+    type: "event",
+    inputs: [
+      { name: "agent",       type: "address", indexed: true },
+      { name: "taskId",      type: "uint256", indexed: true },
+      { name: "slashAmount", type: "uint256" },
+      { name: "efficiencyScore", type: "uint256" },
+    ],
   },
 ] as const;
 

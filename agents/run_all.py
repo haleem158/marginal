@@ -4,10 +4,15 @@ run_all.py — Launch all MARGINAL agents in separate processes.
 Usage:
     python agents/run_all.py
 
+Executor instances are launched automatically based on how many
+EXECUTOR_PRIVATE_KEY_<N> entries exist in .env (e.g. _1, _2, _3).
+Falls back to a single instance using EXECUTOR_PRIVATE_KEY if no
+indexed keys are found.
+
 Launches:
     - Auctioneer on port 8000
-    - Memory Indexer cache API on port 8001  
-    - Executor (2 instances)
+    - Memory Indexer cache API on port 8001
+    - Executor × N  (one per EXECUTOR_PRIVATE_KEY_<N>)
     - Auditor
 """
 import subprocess
@@ -16,19 +21,51 @@ import os
 import time
 import signal
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Explicit path so run_all finds .env regardless of how/where it is invoked.
+_DOTENV_PATH = Path(__file__).parent.parent / ".env"
+load_dotenv(_DOTENV_PATH, override=True)
 
 AGENTS_DIR = Path(__file__).parent
 
 processes = []
 
 
-def launch(script: str, label: str) -> subprocess.Popen:
+def discover_executor_indices() -> list[int]:
+    """Return sorted list of executor key indices found in the environment.
+    E.g. if EXECUTOR_PRIVATE_KEY_1 and EXECUTOR_PRIVATE_KEY_3 are set, returns [1, 3].
+    Falls back to [1] using EXECUTOR_PRIVATE_KEY if no indexed keys found.
+    """
+    indices = []
+    for i in range(1, 20):  # support up to 19 executor wallets
+        if os.getenv(f"EXECUTOR_PRIVATE_KEY_{i}"):
+            indices.append(i)
+    if not indices and os.getenv("EXECUTOR_PRIVATE_KEY"):
+        indices = [1]
+    return indices
+
+
+def launch(script: str, label: str, *args: str) -> subprocess.Popen:
     proc = subprocess.Popen(
-        [sys.executable, str(AGENTS_DIR / script)],
+        [sys.executable, "-u", str(AGENTS_DIR / script), *args],
         cwd=str(AGENTS_DIR),
         env={**os.environ},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        text=True,
     )
     print(f"✅ {label} started (PID {proc.pid})")
+
+    # Stream each agent's output prefixed with its label so you can follow the flow
+    prefix = label.split("(")[0].strip().ljust(20)
+    import threading
+    def _stream():
+        for line in proc.stdout:  # type: ignore[union-attr]
+            print(f"[{prefix}] {line}", end="")
+    threading.Thread(target=_stream, daemon=True).start()
+
     return proc
 
 
@@ -47,13 +84,15 @@ if __name__ == "__main__":
     time.sleep(2)
     processes.append(launch("memory_indexer.py", "Memory Indexer  (port 8001)"))
     time.sleep(1)
-    processes.append(launch("executor.py",       "Executor #1"))
-    time.sleep(1)
-    processes.append(launch("executor.py",       "Executor #2"))
-    time.sleep(1)
-    processes.append(launch("auditor.py",        "Auditor"))
 
-    print("\n🚀 All MARGINAL agents running. Press Ctrl+C to stop.\n")
+    executor_indices = discover_executor_indices()
+    for i, idx in enumerate(executor_indices):
+        processes.append(launch("executor.py", f"Executor #{idx}  (wallet key {idx})", str(idx)))
+        time.sleep(1)
+
+    processes.append(launch("auditor.py", "Auditor"))
+
+    print(f"\n🚀 MARGINAL running: {len(executor_indices)} executor(s). Press Ctrl+C to stop.\n")
 
     try:
         while True:

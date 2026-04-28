@@ -8,7 +8,7 @@ interface TokenBadgeProps {
   className?: string;
 }
 
-export function TokenBadge({ amount, symbol = "$MARG", positive, className }: TokenBadgeProps) {
+export function TokenBadge({ amount, symbol = "A0GI", positive, className }: TokenBadgeProps) {
   const numAmount = typeof amount === 'number' ? amount : parseFloat(String(amount));
   const isPositive = positive !== undefined ? positive : numAmount >= 0;
 

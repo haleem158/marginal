@@ -15,11 +15,12 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 from web3 import Web3
 
@@ -111,15 +112,114 @@ class AuctioneerAgent(BaseAgent):
             block = self.w3.eth.block_number
             return {"status": "ok", "block": block, "agent": self.cfg.agent_id}
 
+        @app.post("/tasks/estimate")
+        async def estimate_task(req: TaskSubmitRequest):
+            """
+            Dry-run estimate: returns compute_units, difficulty, and cost in A0GI
+            WITHOUT submitting on-chain. Used by the frontend to show cost preview.
+            """
+            is_safe = await self._guard_check(req.description)
+            if not is_safe:
+                raise HTTPException(status_code=400, detail="Task rejected by pre-flight guard.")
+            compute_units, difficulty = await self._estimate_task(req.description)
+            reserve_price_per_unit = self.auction_house.functions.reservePricePerUnit().call()
+            reserve_price = compute_units * reserve_price_per_unit
+            task_fee = (reserve_price * 100) // 10_000
+            total_wei = reserve_price + task_fee
+            return {
+                "compute_units":    compute_units,
+                "difficulty":       difficulty,
+                "reserve_price_wei": str(reserve_price),
+                "task_fee_wei":     str(task_fee),
+                "total_cost_wei":   str(total_wei),
+                "total_cost_a0gi":  total_wei / 1e18,
+            }
+
         @app.post("/tasks/submit", response_model=TaskSubmitResponse)
         async def submit_task(req: TaskSubmitRequest, background: BackgroundTasks):
             return await self._handle_submit(req, background)
 
         # NOTE: /tasks/active must come before /tasks/{task_id} so FastAPI doesn't
         # try to coerce "active" as an int and return a 422 before reaching this route.
+
+        # Returns the last 20 tasks as live feed events for the frontend.
+        @app.get("/tasks/recent")
+        async def recent_tasks():
+            task_count = self.auction_house.functions.taskCount().call()
+            start = max(1, task_count - 19)
+            events = []
+            # Map on-chain state uint → feed event type
+            STATE_EVENT = {
+                0: "BID_OPEN",
+                1: "REVEAL_PHASE",
+                2: "AUCTION_WON",
+                3: "TASK_SCORED",
+                4: "REWARD_PAID",
+                5: "REFUNDED",
+            }
+            for tid in range(task_count, start - 1, -1):
+                try:
+                    t = self.auction_house.functions.getTask(tid).call()
+                    state   = t[10]
+                    winner  = t[11]
+                    winning_bid_wei = t[12]
+                    winning_bid_a0gi = winning_bid_wei / 1e18
+                    short_winner = (
+                        f"{winner[:6]}...{winner[-4:]}" if winner and winner != "0x" + "0" * 40 else "—"
+                    )
+                    events.append({
+                        "id":       tid,
+                        "type":     STATE_EVENT.get(state, "BID_OPEN"),
+                        "taskId":   str(tid),
+                        "agent":    short_winner,
+                        "amount":   round(winning_bid_a0gi, 6) if state >= 2 else 0,
+                        "state":    state,
+                        "description": t[2][:60] + ("…" if len(t[2]) > 60 else ""),
+                    })
+                except Exception:
+                    pass
+            return {"events": events}
+
+        # SSE stream — push task state changes to subscribed clients
+        # Clients listen on GET /tasks/stream and receive newline-delimited JSON events.
+        _sse_subscribers: list[asyncio.Queue] = []
+
+        @app.get("/tasks/stream")
+        async def tasks_stream():
+            """Server-Sent Events endpoint. Pushes live task state changes."""
+            queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+            _sse_subscribers.append(queue)
+
+            async def event_generator() -> AsyncGenerator[str, None]:
+                try:
+                    while True:
+                        event = await asyncio.wait_for(queue.get(), timeout=30)
+                        yield f"data: {event}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"  # prevent proxy timeout
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        _sse_subscribers.remove(queue)
+                    except ValueError:
+                        pass
+
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+        # Store subscriber list on self so the auction state machine can broadcast
+        self._sse_subscribers = _sse_subscribers
+
+        # NOTE: /tasks/active must come before /tasks/{task_id} — no "active" coercion to int.
         @app.get("/tasks/active")
-        async def active_tasks():
-            ids = self.auction_house.functions.getActiveTasks().call()
+        async def active_tasks():            ids = self.auction_house.functions.getActiveTasks().call()
             tasks_out = []
             for tid in ids:
                 try:
@@ -151,20 +251,22 @@ class AuctioneerAgent(BaseAgent):
                 t = self.auction_house.functions.getTask(task_id).call()
                 bidders = self.auction_house.functions.getTaskBidders(task_id).call()
                 return {
-                    "id":             t[0],
-                    "submitter":      t[1],
-                    "description":    t[2],
-                    "computeUnits":   t[3],
-                    "difficulty":     t[4],
-                    "reservePrice":   str(t[5]),
-                    "bidDeadline":    t[7],
-                    "revealDeadline": t[8],
-                    "executeDeadline": t[9],
-                    "state":          t[10],
-                    "winner":         t[11],
-                    "winningBid":     str(t[12]),
-                    "highestBid":     str(t[13]),
-                    "bidCount":       len(bidders),
+                    "id":               t[0],
+                    "submitter":        t[1],
+                    "description":      t[2],
+                    "computeUnits":     t[3],
+                    "difficulty":       t[4],
+                    "reservePrice":     str(t[5]),
+                    "bidDeadline":      t[7],
+                    "revealDeadline":   t[8],
+                    "executeDeadline":  t[9],
+                    "state":            t[10],
+                    "winner":           t[11],
+                    "winningBid":       str(t[12]),
+                    "highestBid":       str(t[13]),
+                    "computeUnitsUsed": t[14],
+                    "storagePointer":   t[15],
+                    "bidCount":         len(bidders),
                 }
             except Exception as e:
                 raise HTTPException(status_code=404, detail=str(e))
@@ -229,6 +331,7 @@ class AuctioneerAgent(BaseAgent):
 
         # Step 6: Schedule state advancement in background
         background.add_task(self._advance_auction_state, task_count)
+        self._broadcast("BID_OPEN", task_count, description=req.description[:60])
 
         logger.info(
             "Task #%d submitted | compute=%d | difficulty=%d | fee=%d wei",
@@ -289,6 +392,22 @@ class AuctioneerAgent(BaseAgent):
             logger.warning("Estimation failed (%s) — using defaults", e)
             return 500, 50  # safe defaults
 
+    def _broadcast(self, event_type: str, task_id: int, **kwargs):
+        """Push a live event to all SSE subscribers."""
+        import json as _json
+        payload = _json.dumps({"type": event_type, "taskId": task_id, **kwargs})
+        dead = []
+        for q in getattr(self, "_sse_subscribers", []):
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                dead.append(q)
+        for q in dead:
+            try:
+                self._sse_subscribers.remove(q)
+            except (ValueError, AttributeError):
+                pass
+
     async def _advance_auction_state(self, task_id: int):
         """
         Background task: advance the auction state machine.
@@ -308,6 +427,7 @@ class AuctioneerAgent(BaseAgent):
             # Trigger reveal phase
             try:
                 self._send_tx(self.auction_house.functions.startRevealPhase(task_id))
+                self._broadcast("REVEAL_PHASE", task_id)
                 logger.info("Task #%d: reveal phase started", task_id)
             except Exception as e:
                 logger.warning("Task #%d startRevealPhase failed: %s", task_id, e)
@@ -321,6 +441,7 @@ class AuctioneerAgent(BaseAgent):
             # Clear auction (Vickrey winner selection)
             try:
                 self._send_tx(self.auction_house.functions.clearAuction(task_id))
+                self._broadcast("AUCTION_WON", task_id)
                 logger.info("Task #%d: auction cleared", task_id)
             except Exception as e:
                 logger.error("Task #%d clearAuction failed: %s", task_id, e)
