@@ -2,6 +2,15 @@
 const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // Force Next.js to bundle these ESM-only packages through webpack instead of
+  // externalizing them as CJS requires (which fails for pure-ESM packages).
+  transpilePackages: [
+    "wagmi",
+    "@wagmi/core",
+    "@wagmi/connectors",
+    "@rainbow-me/rainbowkit",
+    "viem",
+  ],
   env: {
     NEXT_PUBLIC_AUCTION_HOUSE_ADDRESS: process.env.NEXT_PUBLIC_AUCTION_HOUSE_ADDRESS || "",
     NEXT_PUBLIC_STAKE_VAULT_ADDRESS:   process.env.NEXT_PUBLIC_STAKE_VAULT_ADDRESS || "",
@@ -11,15 +20,12 @@ const nextConfig = {
     NEXT_PUBLIC_OG_EXPLORER:           process.env.NEXT_PUBLIC_OG_EXPLORER || "https://chainscan.0g.ai",
     NEXT_PUBLIC_AUCTIONEER_URL:        process.env.NEXT_PUBLIC_AUCTIONEER_URL || "http://localhost:8000",
   },
-  experimental: { serverComponentsExternalPackages: ["viem"] },
+  experimental: {},
   webpack(config) {
-    // Stub any wagmi/connectors exports that RainbowKit references but the
-    // installed wagmi version doesn't provide (e.g. baseAccount in wagmi 2.x vs 3.x).
     config.resolve.alias = {
       ...config.resolve.alias,
-      // @metamask/sdk ships React Native deps that don't exist in a browser build.
-      // Stub them out so Next.js webpack doesn't fail trying to resolve them.
       "@react-native-async-storage/async-storage": false,
+      "pino-pretty": false,
     };
     config.resolve.fallback = {
       ...config.resolve.fallback,

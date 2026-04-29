@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { mockHistoryEvents, HistoryEvent } from "@/lib/mock-data";
 import { indexer, SettlementRecord } from "@/lib/api";
 import { ScoreBadge } from "@/components/shared/score-badge";
+import { LiveMockBadge } from "@/components/shared/live-mock-badge";
 import { OG_EXPLORER } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 
@@ -93,14 +94,7 @@ export default function HistoryPage() {
               : "Showing mock data — start agents to see real settlements"}
           </p>
         </div>
-        <span className={cn(
-          "px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wider",
-          isLive
-            ? "bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/20"
-            : "bg-white/4 text-[#555555] border border-white/8"
-        )}>
-          {isLive ? "● LIVE" : "● MOCK"}
-        </span>
+        <LiveMockBadge isLive={isLive} className="py-1" />
       </div>
 
       {/* Tabs */}

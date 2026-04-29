@@ -213,7 +213,7 @@ export default function TasksPage() {
           {/* Step 1 */}
           <div className="p-5 rounded-xl bg-white/2 border border-white/6">
             <label className="block text-xs text-[#555555] uppercase tracking-wider mb-3">
-              Step 1 â€” What do you need done?
+              Step 1 — What do you need done?
             </label>
             <textarea
               ref={textareaRef}
@@ -234,7 +234,7 @@ export default function TasksPage() {
           {/* Step 2 */}
           <div className="p-5 rounded-xl bg-white/2 border border-white/6">
             <label className="block text-xs text-[#555555] uppercase tracking-wider mb-3">
-              Step 2 â€” Model Preference
+              Step 2 — Model Preference
             </label>
             <div className="grid grid-cols-2 gap-3">
               {(["qwen3.6-plus", "GLM-5-FP8"] as const).map((m) => (
@@ -267,7 +267,7 @@ export default function TasksPage() {
           {/* Step 3 */}
           <div className="p-5 rounded-xl bg-white/2 border border-white/6">
             <label className="block text-xs text-[#555555] uppercase tracking-wider mb-3">
-              Step 3 â€” Maximum Compute Budget
+              Step 3 — Maximum Compute Budget
             </label>
             <div className="relative">
               <input
@@ -299,14 +299,14 @@ export default function TasksPage() {
             </p>
           </div>
 
-          {/* Step 4 â€“ collapsible */}
+          {/* Step 4 — collapsible */}
           <div className="rounded-xl border border-white/6 overflow-hidden">
             <button
               onClick={() => setReserveOpen(!reserveOpen)}
               className="w-full flex items-center justify-between px-5 py-4 text-sm text-[#888888] hover:text-[#F5F5F5] transition-colors"
             >
               <span>
-                Step 4 â€” Reserve Price{" "}
+                Step 4 — Reserve Price{" "}
                 <span className="text-[#555555] text-xs">(optional)</span>
               </span>
               <ChevronDown

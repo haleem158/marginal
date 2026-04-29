@@ -78,12 +78,17 @@ contract AuctionHouse is Ownable, ReentrancyGuard {
     /// @dev Protocol fee accumulator — only these funds are withdrawable via withdrawTreasury
     uint256 public protocolFees;
 
-    /// @dev Bid commit window — short to keep demo snappy, raise in production
+    /// @dev Bid commit window — override in subclass for local demo
     uint256 public constant BID_WINDOW            = 5 minutes;
     /// @dev Reveal window after commit closes
     uint256 public constant REVEAL_WINDOW         = 3 minutes;
-    /// @dev Grace period for execution (2× the estimated compute time, floored here)
+    /// @dev Grace period for execution
     uint256 public constant DEFAULT_EXECUTE_GRACE = 15 minutes;
+
+    // ── Virtual time-window accessors (override in AuctionHouseDemo) ─────────
+    function _bidWindow()     internal view virtual returns (uint256) { return BID_WINDOW; }
+    function _revealWindow()  internal view virtual returns (uint256) { return REVEAL_WINDOW; }
+    function _executeGrace()  internal view virtual returns (uint256) { return DEFAULT_EXECUTE_GRACE; }
 
     /// @dev Reserve price per compute unit in wei (set by owner; mirrors 0G Compute pricing)
     uint256 public reservePricePerUnit = 1_000 gwei;
@@ -186,9 +191,9 @@ contract AuctionHouse is Ownable, ReentrancyGuard {
             difficultyScore:      difficultyScore,
             reservePrice:         reservePrice,
             taskFee:              taskFee,
-            bidDeadline:          block.timestamp + BID_WINDOW,
-            revealDeadline:       block.timestamp + BID_WINDOW + REVEAL_WINDOW,
-            executeDeadline:      block.timestamp + BID_WINDOW + REVEAL_WINDOW + DEFAULT_EXECUTE_GRACE,
+            bidDeadline:          block.timestamp + _bidWindow(),
+            revealDeadline:       block.timestamp + _bidWindow() + _revealWindow(),
+            executeDeadline:      block.timestamp + _bidWindow() + _revealWindow() + _executeGrace(),
             state:                TaskState.Open,
             winner:               address(0),
             winningBid:           0,

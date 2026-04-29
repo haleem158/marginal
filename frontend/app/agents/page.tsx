@@ -8,6 +8,8 @@ import { indexer, IndexerAgent } from "@/lib/api";
 import { ScoreBadge } from "@/components/shared/score-badge";
 import { AgentTypeBadge } from "@/components/shared/agent-type-badge";
 import { AddressChip } from "@/components/shared/address-chip";
+import { ScoreBar } from "@/components/shared/score-bar";
+import { LiveMockBadge } from "@/components/shared/live-mock-badge";
 import { cn } from "@/lib/utils";
 
 const agentTypes = ["All", "executor", "auctioneer", "auditor", "treasury", "memory"];
@@ -18,18 +20,6 @@ const statusStyles: Record<AgentStatus, { label: string; color: string; bg: stri
   cooldown: { label: "Cooldown", color: "#FFB800", bg: "rgba(255,184,0,0.10)" },
   slashed:  { label: "Slashed",  color: "#FF4455", bg: "rgba(255,68,85,0.10)" },
 };
-
-function ScoreBar({ score }: { score: number }) {
-  const color = score >= 0.8 ? "#00FF88" : score >= 0.5 ? "#FFB800" : "#FF4455";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 rounded-full bg-white/8 overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${score * 100}%`, backgroundColor: color }} />
-      </div>
-      <span className="font-mono text-xs tabular-nums" style={{ color }}>{score.toFixed(2)}</span>
-    </div>
-  );
-}
 
 /** Convert a raw Memory Indexer agent record to the UI shape. */
 function toUIAgent(a: IndexerAgent) {
@@ -119,14 +109,7 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className={cn(
-            "px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wider",
-            isLive
-              ? "bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/20"
-              : "bg-white/4 text-[#555555] border border-white/8"
-          )}>
-            {isLive ? "● LIVE" : "● MOCK"}
-          </span>
+          <LiveMockBadge isLive={isLive} className="py-1" />
           <Link
             href="/agents/register"
             className="px-4 py-2 rounded-lg bg-[#00C2FF] text-[#080808] text-sm font-semibold hover:bg-[#00A8E0] transition-colors"
@@ -205,7 +188,7 @@ export default function AgentsPage() {
                 </div>
               </div>
               <div><AgentTypeBadge type={agent.type as AgentType} /></div>
-              <div><ScoreBar score={agent.score} /></div>
+              <div><ScoreBar score={agent.score} barClassName="w-16" /></div>
               <div className="font-mono text-sm text-[#F5F5F5]">{agent.tasks.toLocaleString()}</div>
               <div className="font-mono text-sm text-[#F5F5F5]">
                 {agent.stake.toLocaleString()}{" "}

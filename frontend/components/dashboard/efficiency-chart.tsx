@@ -13,6 +13,7 @@ import {
 import { mockMarketEfficiency } from "@/lib/mock-data";
 import { indexer, SettlementRecord } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { LiveMockBadge } from "@/components/shared/live-mock-badge";
 
 const tabs = ["24h", "6h", "1h"];
 
@@ -44,7 +45,7 @@ function buildChartData(records: SettlementRecord[], hours: number): ChartPoint[
     });
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs font-mono shadow-xl">
@@ -93,14 +94,7 @@ export function EfficiencyChart() {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-[#F5F5F5]">Market Efficiency Over Time</h3>
-            <span className={cn(
-              "px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider",
-              isLive
-                ? "bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/20"
-                : "bg-white/4 text-[#555555] border border-white/8"
-            )}>
-              {isLive ? "● live" : "● mock"}
-            </span>
+            <LiveMockBadge isLive={isLive} className="px-1.5 text-[9px]" />
           </div>
           <p className="text-xs text-[#555555] mt-0.5">Top vs Bottom Quartile Efficiency Scores</p>
         </div>

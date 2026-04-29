@@ -33,7 +33,7 @@ export function SubmitTask({ onSubmitted }: { onSubmitted: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           description: description.trim(),
-          submitter_address: "0x0000000000000000000000000000000000000000", // placeholder for API
+          submitter_address: "0x0000000000000000000000000000000000000000",
         }),
       });
 
@@ -46,8 +46,8 @@ export function SubmitTask({ onSubmitted }: { onSubmitted: () => void }) {
       setResult(data);
       setDescription("");
       onSubmitted();
-    } catch (err: any) {
-      setError(err.message || "Unknown error");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }

@@ -34,8 +34,8 @@ export default function RegisterAgentPage() {
   const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
-  const isRegistered = (agentRecord as any)?.[6] === true;  // registered field
-  const currentStake = agentRecord ? formatEther((agentRecord as any)[0] as bigint) : "0";
+  const isRegistered = agentRecord?.registered === true;
+  const currentStake = agentRecord ? formatEther(agentRecord.totalStake) : "0";
   const minStakeEth  = minStake ? formatEther(minStake as bigint) : "0.01";
 
   function handleAction() {

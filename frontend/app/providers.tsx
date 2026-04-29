@@ -1,35 +1,11 @@
-"use client";
+﻿"use client";
 
-import { WagmiProvider, createConfig, http } from "wagmi";
-import { injected, walletConnect } from "wagmi/connectors";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
-import { ThemeProvider } from "next-themes";
-import { ogTestnet } from "@/lib/contracts";
-import "@rainbow-me/rainbowkit/styles.css";
+import dynamic from "next/dynamic";
 
-const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
-
-const connectors = wcProjectId
-  ? [injected(), walletConnect({ projectId: wcProjectId })]
-  : [injected()];
-
-const config = createConfig({
-  chains: [ogTestnet],
-  connectors,
-  transports: { [ogTestnet.id]: http(process.env.NEXT_PUBLIC_RPC_URL) },
-});
-
-const queryClient = new QueryClient();
+// Load wagmi/RainbowKit only on the client — they are ESM-only and cannot be
+// require()'d during Next.js SSR, causing WagmiProvider to be undefined.
+const ProvidersInner = dynamic(() => import("./providers-inner"), { ssr: false });
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider>{children}</RainbowKitProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
-    </ThemeProvider>
-  );
+  return <ProvidersInner>{children}</ProvidersInner>;
 }

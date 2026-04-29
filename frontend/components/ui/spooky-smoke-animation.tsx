@@ -53,6 +53,11 @@ class Renderer {
   private fs: WebGLShader | null = null;
   private buffer: WebGLBuffer | null = null;
   private color: [number, number, number] = [0, 0.76, 1]; // #00C2FF
+  private uniforms: {
+    resolution: WebGLUniformLocation | null;
+    time: WebGLUniformLocation | null;
+    u_color: WebGLUniformLocation | null;
+  } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -104,9 +109,11 @@ class Renderer {
     const pos = gl.getAttribLocation(program, "position");
     gl.enableVertexAttribArray(pos);
     gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
-    (program as any).resolution = gl.getUniformLocation(program, "resolution");
-    (program as any).time       = gl.getUniformLocation(program, "time");
-    (program as any).u_color    = gl.getUniformLocation(program, "u_color");
+    this.uniforms = {
+      resolution: gl.getUniformLocation(program, "resolution"),
+      time:       gl.getUniformLocation(program, "time"),
+      u_color:    gl.getUniformLocation(program, "u_color"),
+    };
   }
 
   render(now = 0) {
@@ -116,9 +123,10 @@ class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.uniform2f((program as any).resolution, canvas.width, canvas.height);
-    gl.uniform1f((program as any).time,       now * 1e-3);
-    gl.uniform3fv((program as any).u_color,   this.color);
+    if (!this.uniforms) return;
+    gl.uniform2f(this.uniforms.resolution, canvas.width, canvas.height);
+    gl.uniform1f(this.uniforms.time,       now * 1e-3);
+    gl.uniform3fv(this.uniforms.u_color,   this.color);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -129,6 +137,7 @@ class Renderer {
     if (fs) { gl.detachShader(program, fs); gl.deleteShader(fs); }
     gl.deleteProgram(program);
     this.program = null;
+    this.uniforms = null;
   }
 }
 

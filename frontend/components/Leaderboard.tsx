@@ -2,17 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
-
-interface AgentState {
-  address: string;
-  total_stake_wei: string;
-  efficiency_score: number;
-  tasks_completed: number;
-  lifetime_rewards_wei: string;
-  lifetime_slashed_wei: string;
-  nft_token_id: number;
-  last_updated: number;
-}
+import { IndexerAgent } from "@/lib/api";
 
 function scoreColor(score: number): string {
   const pct = score / 10_000; // normalize from 0-10000
@@ -48,13 +38,13 @@ export function Leaderboard({
   refreshKey: number;
   indexerUrl: string;
 }) {
-  const [agents, setAgents] = useState<AgentState[]>([]);
+  const [agents, setAgents] = useState<IndexerAgent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${indexerUrl}/agents`)
       .then((r) => r.json())
-      .then((data: AgentState[]) => {
+      .then((data: IndexerAgent[]) => {
         // Sort by efficiency score descending
         const sorted = [...data].sort((a, b) => b.efficiency_score - a.efficiency_score);
         setAgents(sorted);
