@@ -85,6 +85,11 @@ if __name__ == "__main__":
     processes.append(launch("memory_indexer.py", "Memory Indexer  (port 8001)"))
     time.sleep(1)
 
+    # Gateway exposes both APIs on a single public port ($PORT, default 8080).
+    # Required for Railway / cloud deployments that only expose one port.
+    processes.append(launch("gateway.py", "Gateway         (port $PORT)"))
+    time.sleep(1)
+
     executor_indices = discover_executor_indices()
     for i, idx in enumerate(executor_indices):
         processes.append(launch("executor.py", f"Executor #{idx}  (wallet key {idx})", str(idx)))
