@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: marginal-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python agents/run_all.py
+    plan: starter          # must be starter or higher — free tier sleeps
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false        # set manually in Render dashboard
+      - key: EXECUTOR_PRIVATE_KEY
+        sync: false        # set manually in Render dashboard
+      - key: RPC_URL
+        value: https://evmrpc.0g.ai
+      - key: CHAIN_ID
+        value: "16661"
+      - key: AUCTION_HOUSE_ADDRESS
+        value: "0x17758a3324B65FEbDccDdf3659A4eDD5487d861A"
+      - key: STAKE_VAULT_ADDRESS
+        value: "0xe2119bf943999647A8C5EA025Ea13C98c020A39F"
+      - key: MARGINAL_NFT_ADDRESS
+        value: "0xa17931723B7fAED34F8532a95F8b62DD27a06102"
