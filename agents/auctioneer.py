@@ -219,7 +219,8 @@ class AuctioneerAgent(BaseAgent):
 
         # NOTE: /tasks/active must come before /tasks/{task_id} — no "active" coercion to int.
         @app.get("/tasks/active")
-        async def active_tasks():            ids = self.auction_house.functions.getActiveTasks().call()
+        async def active_tasks():
+            ids = self.auction_house.functions.getActiveTasks().call()
             tasks_out = []
             for tid in ids:
                 try:

@@ -223,8 +223,14 @@ class MemoryIndexerAgent(BaseAgent):
 
     # ── KV helpers ────────────────────────────────────────────────────────────
 
+    # Simple hex address check to avoid ENS lookups on bad inputs
+    _ETH_ADDR_RE = __import__('re').compile(r'^0x[0-9a-fA-F]{40}$')
+
     async def _refresh_agent_kv(self, agent_address: str):
         """Pull live agent state from chain and write to KV."""
+        if not self._ETH_ADDR_RE.match(agent_address):
+            logger.debug("Skipping KV refresh for non-address: %s", agent_address)
+            return
         try:
             record = self.stake_vault.functions.getAgentRecord(agent_address).call()
             token_id = self.marginal_nft.functions.agentToToken(agent_address).call()
@@ -339,6 +345,8 @@ class MemoryIndexerAgent(BaseAgent):
 
         @api.get("/agents/{address}")
         async def get_agent(address: str):
+            if not self._ETH_ADDR_RE.match(address):
+                return {}
             state = self._agent_state_cache.get(address)
             if not state:
                 # Try fetching from chain directly
