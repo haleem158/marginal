@@ -8,13 +8,23 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: GROQ_API_KEY
-        sync: false        # set manually in Render dashboard
+      # ── Secrets: set these manually in Render dashboard ──
+      - key: OG_COMPUTE_API_KEY
+        sync: false
       - key: EXECUTOR_PRIVATE_KEY
-        sync: false        # set manually in Render dashboard
-      - key: RPC_URL
+        sync: false
+      - key: AUCTIONEER_PRIVATE_KEY
+        sync: false
+      - key: AUDITOR_PRIVATE_KEY
+        sync: false
+      # ── Non-secret values ──
+      - key: OG_RPC_URL
         value: https://evmrpc.0g.ai
-      - key: CHAIN_ID
+      - key: OG_COMPUTE_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: OG_COMPUTE_MODEL
+        value: llama-3.3-70b-versatile
+      - key: NEXT_PUBLIC_CHAIN_ID
         value: "16661"
       - key: AUCTION_HOUSE_ADDRESS
         value: "0x17758a3324B65FEbDccDdf3659A4eDD5487d861A"
@@ -22,3 +32,13 @@ services:
         value: "0xe2119bf943999647A8C5EA025Ea13C98c020A39F"
       - key: MARGINAL_NFT_ADDRESS
         value: "0xa17931723B7fAED34F8532a95F8b62DD27a06102"
+      - key: OG_STORAGE_NODE_URL
+        value: https://storage.0g.ai
+      - key: OG_KV_BUCKET
+        value: marginal-agent-state
+      - key: OG_LOG_STREAM_ID
+        value: marginal-task-log
+      - key: AGENT_BIND_HOST
+        value: "0.0.0.0"
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
