@@ -2,9 +2,10 @@ services:
   - type: web
     name: marginal-backend
     runtime: python
+    pythonVersion: "3.11.9"
     buildCommand: pip install -r requirements.txt
     startCommand: python agents/run_all.py
-    plan: starter          # must be starter or higher — free tier sleeps
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: GROQ_API_KEY
