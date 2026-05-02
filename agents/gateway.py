@@ -33,6 +33,12 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health():
+    """Health check — answered directly by gateway so Render/UptimeRobot always get 200."""
+    return {"status": "ok"}
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str):
     """Transparent reverse proxy — routes by path prefix."""
