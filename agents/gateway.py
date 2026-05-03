@@ -56,15 +56,22 @@ async def health():
 @app.get("/probe")
 async def probe():
     """Diagnostic: return raw connection result for each agent port."""
-    import socket, asyncio, subprocess as _sp
+    import socket, asyncio
     results = {}
 
-    # Show what ports are actually bound in this container
+    # Read /proc/net/tcp to see what's actually listening (ground truth)
     try:
-        r = _sp.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=3)
-        results["ss_output"] = r.stdout.strip()[:500] or r.stderr.strip()[:200]
+        with open("/proc/net/tcp") as f:
+            lines = f.readlines()[1:]
+        listening = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) > 3 and parts[3] == "0A":  # 0A = LISTEN
+                port_hex = parts[1].split(":")[1]
+                listening.append(int(port_hex, 16))
+        results["listening_ports"] = sorted(listening)
     except Exception as e:
-        results["ss_output"] = f"ss failed: {e}"
+        results["listening_ports"] = f"error:{e}"
 
     # Raw TCP socket test (bypasses httpx entirely)
     def tcp_check(host: str, port: int) -> str:
