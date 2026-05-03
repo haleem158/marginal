@@ -20,8 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger("marginal.gateway")
 
-AUCTIONEER_ORIGIN = "http://localhost:8000"
-INDEXER_ORIGIN    = "http://localhost:8001"
+AUCTIONEER_ORIGIN = "http://127.0.0.1:8000"
+INDEXER_ORIGIN    = "http://127.0.0.1:8001"
 
 app = FastAPI(title="Marginal Gateway")
 
