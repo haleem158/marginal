@@ -95,14 +95,20 @@ if __name__ == "__main__":
         print(f"\n🚀 MARGINAL running: {len(executor_indices)} executor(s). Press Ctrl+C to stop.\n")
 
     try:
+        tick = 0
         while True:
             time.sleep(5)
+            tick += 1
             dead = [p for p in processes if p.poll() is not None]
             for proc in dead:
-                print(f"⚠️  Process {proc.pid} exited with code {proc.returncode}")
+                print(f"⚠️  Process {proc.pid} exited with code {proc.returncode}", flush=True)
                 processes.remove(proc)
             if not processes:
-                print("All agents have exited. Shutting down.")
+                print("All agents have exited. Shutting down.", flush=True)
                 break
+            # Heartbeat every 60s so Railway logs show the container is alive
+            if tick % 12 == 0:
+                alive = [p.pid for p in processes]
+                print(f"[heartbeat] alive PIDs: {alive}", flush=True)
     except KeyboardInterrupt:
         shutdown(None, None)
