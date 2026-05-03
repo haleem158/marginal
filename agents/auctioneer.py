@@ -78,7 +78,7 @@ class AuctioneerAgent(BaseAgent):
     def __init__(self):
         cfg = load_config("auctioneer")
         super().__init__(cfg, "auctioneer")
-        self.app = FastAPI(title="MARGINAL Auctioneer API", version="1.0.0")
+        self.app = FastAPI(title="MARGINAL Auctioneer API", version="1.0.0", docs_url=None, openapi_url=None)
 
         # ── CORS: allow the frontend origin (configurable) ────────────────────
         allowed_origins = os.getenv(

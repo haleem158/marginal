@@ -320,7 +320,7 @@ class MemoryIndexerAgent(BaseAgent):
         from fastapi import FastAPI, HTTPException, Request
         import uuid
 
-        api = FastAPI(title="MARGINAL Memory Indexer Cache", version="1.0.0")
+        api = FastAPI(title="MARGINAL Memory Indexer Cache", version="1.0.0", docs_url=None, openapi_url=None)
 
         @api.get("/health")
         async def health():
