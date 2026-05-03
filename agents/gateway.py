@@ -36,7 +36,21 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     """Health check — answered directly by gateway so Render/UptimeRobot always get 200."""
-    return {"status": "ok"}
+    auctioneer_ok = False
+    indexer_ok = False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{AUCTIONEER_ORIGIN}/health")
+            auctioneer_ok = r.status_code == 200
+    except Exception:
+        pass
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{INDEXER_ORIGIN}/health")
+            indexer_ok = r.status_code == 200
+    except Exception:
+        pass
+    return {"status": "ok", "auctioneer": auctioneer_ok, "indexer": indexer_ok}
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
