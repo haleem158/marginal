@@ -51,21 +51,10 @@ def launch(script: str, label: str, *args: str) -> subprocess.Popen:
         [sys.executable, "-u", str(AGENTS_DIR / script), *args],
         cwd=str(AGENTS_DIR),
         env={**os.environ},
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=1,
-        text=True,
+        stdout=None,   # inherit — goes directly to Railway logs
+        stderr=None,   # inherit — crash tracebacks visible immediately
     )
-    print(f"✅ {label} started (PID {proc.pid})")
-
-    # Stream each agent's output prefixed with its label so you can follow the flow
-    prefix = label.split("(")[0].strip().ljust(20)
-    import threading
-    def _stream():
-        for line in proc.stdout:  # type: ignore[union-attr]
-            print(f"[{prefix}] {line}", end="")
-    threading.Thread(target=_stream, daemon=True).start()
-
+    print(f"✅ {label} started (PID {proc.pid})", flush=True)
     return proc
 
 
