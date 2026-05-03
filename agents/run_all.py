@@ -1,35 +1,96 @@
 """
-run_all.py — Launch all MARGINAL agents in separate processes.
+run_all.py — Run all MARGINAL API services in a single asyncio event loop.
 
-Usage:
-    python agents/run_all.py
-
-Executor instances are launched automatically based on how many
-EXECUTOR_PRIVATE_KEY_<N> entries exist in .env (e.g. _1, _2, _3).
-Falls back to a single instance using EXECUTOR_PRIVATE_KEY if no
-indexed keys are found.
-
-Launches:
-    - Auctioneer on port 8000
-    - Memory Indexer cache API on port 8001
-    - Executor × N  (one per EXECUTOR_PRIVATE_KEY_<N>)
-    - Auditor
+In RUN_MODE=api (default on Railway): gateway + auctioneer + memory indexer
+In RUN_MODE=full: same + executor/auditor subprocesses
 """
-import subprocess
-import sys
+import asyncio
+import logging
 import os
-import time
+import sys
+import subprocess
 import signal
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Explicit path so run_all finds .env regardless of how/where it is invoked.
 _DOTENV_PATH = Path(__file__).parent.parent / ".env"
 load_dotenv(_DOTENV_PATH, override=True)
 
 AGENTS_DIR = Path(__file__).parent
+sys.path.insert(0, str(AGENTS_DIR))
 
-processes = []
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
+)
+logger = logging.getLogger("marginal.run_all")
+
+extra_procs = []  # executor/auditor subprocesses in full mode
+
+
+def discover_executor_indices() -> list[int]:
+    indices = [i for i in range(1, 20) if os.getenv(f"EXECUTOR_PRIVATE_KEY_{i}")]
+    if not indices and os.getenv("EXECUTOR_PRIVATE_KEY"):
+        indices = [1]
+    return indices
+
+
+def launch_subprocess(script: str, label: str, *args: str) -> subprocess.Popen:
+    proc = subprocess.Popen(
+        [sys.executable, "-u", str(AGENTS_DIR / script), *args],
+        cwd=str(AGENTS_DIR),
+        env={**os.environ},
+    )
+    logger.info("%s started (PID %d)", label, proc.pid)
+    return proc
+
+
+async def api_main():
+    """Run gateway + auctioneer + indexer in one event loop — no subprocess issues."""
+    from auctioneer import AuctioneerAgent
+    from memory_indexer import MemoryIndexerAgent
+    import gateway as gw_module
+    import uvicorn
+
+    logger.info("Initialising AuctioneerAgent...")
+    auctioneer = AuctioneerAgent()
+    logger.info("Initialising MemoryIndexerAgent...")
+    indexer = MemoryIndexerAgent()
+
+    port = int(os.getenv("PORT", 8080))
+    gw_config = uvicorn.Config(gw_module.app, host="0.0.0.0", port=port, log_level="info")
+    gw_server = uvicorn.Server(gw_config)
+
+    logger.info("Launching: gateway :%d | auctioneer :8000 | indexer :8001", port)
+    await asyncio.gather(
+        auctioneer.run(),
+        indexer.run(),
+        gw_server.serve(),
+    )
+
+
+def shutdown(sig, frame):
+    for p in extra_procs:
+        p.terminate()
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    run_mode = os.getenv("RUN_MODE", "full").lower()
+
+    if run_mode == "full":
+        for idx in discover_executor_indices():
+            extra_procs.append(launch_subprocess("executor.py", f"Executor #{idx}", str(idx)))
+        extra_procs.append(launch_subprocess("auditor.py", "Auditor"))
+        logger.info("Full mode: launched %d extra processes", len(extra_procs))
+    else:
+        logger.info("API-only mode (no executor/auditor)")
+
+    asyncio.run(api_main())
+
 
 
 def discover_executor_indices() -> list[int]:

@@ -51,7 +51,7 @@ class BaseAgent:
         self.logger = logging.getLogger(f"marginal.{role}")
 
         # ── Web3 ─────────────────────────────────────────────────────────────
-        self.w3 = Web3(Web3.HTTPProvider(cfg.og_rpc_url, request_kwargs={"timeout": 5}))
+        self.w3 = Web3(Web3.HTTPProvider(cfg.og_rpc_url, request_kwargs={"timeout": 30}))
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         # NOTE: do NOT call w3.is_connected() here — it makes a synchronous HTTP
         # request that can block __init__ for 30s, preventing uvicorn from starting.

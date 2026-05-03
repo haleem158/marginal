@@ -41,8 +41,9 @@ class MemoryIndexerAgent(BaseAgent):
         cfg = load_config("memory_indexer")
         super().__init__(cfg, "memory_indexer")
 
-        # Track the last block we've processed to avoid reprocessing events
-        self._last_block = self.w3.eth.block_number
+        # Do NOT call self.w3.eth.block_number here — it's a blocking sync RPC
+        # call that would hang __init__. Fetched non-blockingly in run() instead.
+        self._last_block = 0
         self._processed_tasks: set[int] = set()
 
         # Local in-memory cache for frontend API
@@ -52,6 +53,12 @@ class MemoryIndexerAgent(BaseAgent):
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     async def run(self):
+        # Fetch current block non-blockingly so we don't miss events
+        loop = asyncio.get_event_loop()
+        try:
+            self._last_block = await loop.run_in_executor(None, lambda: self.w3.eth.block_number)
+        except Exception as e:
+            logger.warning("Could not fetch initial block number: %s — starting from 0", e)
         logger.info("Memory Indexer starting... current block: %d", self._last_block)
 
         await asyncio.gather(
