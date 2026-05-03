@@ -56,7 +56,24 @@ async def health():
 @app.get("/probe")
 async def probe():
     """Diagnostic: return raw connection result for each agent port."""
+    import socket, asyncio
     results = {}
+
+    # Raw TCP socket test (bypasses httpx entirely)
+    def tcp_check(host: str, port: int) -> str:
+        try:
+            s = socket.create_connection((host, port), timeout=3)
+            s.close()
+            return "tcp_open"
+        except ConnectionRefusedError:
+            return "tcp_refused"
+        except Exception as e:
+            return f"tcp_error:{e}"
+
+    loop = asyncio.get_event_loop()
+    results["tcp_8000"] = await loop.run_in_executor(None, tcp_check, "127.0.0.1", 8000)
+    results["tcp_8001"] = await loop.run_in_executor(None, tcp_check, "127.0.0.1", 8001)
+
     for name, origin in [("auctioneer", AUCTIONEER_ORIGIN), ("indexer", INDEXER_ORIGIN)]:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
