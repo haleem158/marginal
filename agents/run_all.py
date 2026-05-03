@@ -80,6 +80,10 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
+    # RUN_MODE=api → only gateway + auctioneer + indexer (fits in 512MB on Render free tier)
+    # RUN_MODE=full (default) → all agents including executor and auditor
+    run_mode = os.getenv("RUN_MODE", "full").lower()
+
     processes.append(launch("auctioneer.py",     "Auctioneer      (port 8000)"))
     time.sleep(2)
     processes.append(launch("memory_indexer.py", "Memory Indexer  (port 8001)"))
@@ -90,14 +94,16 @@ if __name__ == "__main__":
     processes.append(launch("gateway.py", "Gateway         (port $PORT)"))
     time.sleep(1)
 
-    executor_indices = discover_executor_indices()
-    for i, idx in enumerate(executor_indices):
-        processes.append(launch("executor.py", f"Executor #{idx}  (wallet key {idx})", str(idx)))
-        time.sleep(1)
+    if run_mode == "api":
+        print(f"\n🚀 MARGINAL running in API-only mode (no executor/auditor). Press Ctrl+C to stop.\n")
+    else:
+        executor_indices = discover_executor_indices()
+        for i, idx in enumerate(executor_indices):
+            processes.append(launch("executor.py", f"Executor #{idx}  (wallet key {idx})", str(idx)))
+            time.sleep(1)
 
-    processes.append(launch("auditor.py", "Auditor"))
-
-    print(f"\n🚀 MARGINAL running: {len(executor_indices)} executor(s). Press Ctrl+C to stop.\n")
+        processes.append(launch("auditor.py", "Auditor"))
+        print(f"\n🚀 MARGINAL running: {len(executor_indices)} executor(s). Press Ctrl+C to stop.\n")
 
     try:
         while True:
