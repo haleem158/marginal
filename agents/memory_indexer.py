@@ -69,7 +69,8 @@ class MemoryIndexerAgent(BaseAgent):
             await asyncio.sleep(POLL_INTERVAL)
 
     async def _process_new_events(self):
-        current_block = self.w3.eth.block_number
+        loop = asyncio.get_event_loop()
+        current_block = await loop.run_in_executor(None, lambda: self.w3.eth.block_number)
 
         if current_block <= self._last_block:
             return
@@ -315,6 +316,10 @@ class MemoryIndexerAgent(BaseAgent):
         import uuid
 
         api = FastAPI(title="MARGINAL Memory Indexer Cache", version="1.0.0")
+
+        @api.get("/health")
+        async def health():
+            return {"status": "ok", "agent": "memory_indexer"}
 
         # ── Storage backend (KV + Log) ─────────────────────────────────────
         # Used by executor (write) and auditor (read) when 0G Storage is offline.

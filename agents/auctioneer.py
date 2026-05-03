@@ -109,8 +109,8 @@ class AuctioneerAgent(BaseAgent):
 
         @app.get("/health")
         async def health():
-            block = self.w3.eth.block_number
-            return {"status": "ok", "block": block, "agent": self.cfg.agent_id}
+            # No synchronous RPC call here — keeps the event loop free
+            return {"status": "ok", "agent": self.cfg.agent_id}
 
         @app.post("/tasks/estimate")
         async def estimate_task(req: TaskSubmitRequest):
