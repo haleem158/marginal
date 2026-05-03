@@ -55,7 +55,10 @@ class BaseAgent:
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         if not self.w3.is_connected():
-            raise ConnectionError(f"Cannot connect to 0G Chain at {cfg.og_rpc_url}")
+            self.logger.warning(
+                "Could not verify connection to 0G Chain at %s — will retry on first use.",
+                cfg.og_rpc_url,
+            )
 
         self.account = Account.from_key(cfg.private_key)
         self.logger.info("Agent wallet: %s", self.account.address)
