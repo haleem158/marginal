@@ -1,14 +1,13 @@
 """
-gateway.py — Single-port reverse proxy for Railway deployment.
+gateway.py — Minimal gateway app used for standalone health/probe checks.
 
-Routes:
-  /indexer/*   →  Memory Indexer (localhost:8001)
-  everything else  →  Auctioneer  (localhost:8000)
+In production (run_all.py), auctioneer + indexer are MOUNTED directly onto this app
+so there is only one uvicorn server on $PORT. No separate ports, no proxy needed.
 
-Railway injects $PORT; locally defaults to 8080.
-This lets both agents be reached via a single public HTTPS URL:
-  NEXT_PUBLIC_AUCTIONEER_URL = https://<railway-url>
-  NEXT_PUBLIC_INDEXER_URL    = https://<railway-url>/indexer
+Routes when run via run_all.py:
+  /health, /probe, /tasks/*, /indexer/*  — all served from one process.
+
+Standalone mode (python gateway.py) still works as a reverse proxy for local dev.
 """
 import os
 import logging
@@ -20,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger("marginal.gateway")
 
+# These are only used in standalone/dev reverse-proxy mode
 AUCTIONEER_ORIGIN = "http://127.0.0.1:8000"
 INDEXER_ORIGIN    = "http://127.0.0.1:8001"
 
@@ -31,6 +31,73 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/probe")
+async def probe():
+    """Diagnostic probe — checks listening ports and path reachability."""
+    results = {}
+
+    try:
+        with open("/proc/net/tcp") as f:
+            lines = f.readlines()[1:]
+        listening = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) > 3 and parts[3] == "0A":
+                port_hex = parts[1].split(":")[1]
+                listening.append(int(port_hex, 16))
+        results["listening_ports"] = sorted(listening)
+    except Exception as e:
+        results["listening_ports"] = f"error:{e}"
+
+    # Test auctioneer + indexer reachability (self-referential in single-server mode)
+    import asyncio
+    port = int(os.getenv("PORT", 8080))
+    base = f"http://127.0.0.1:{port}"
+    for name, path in [("auctioneer", "/health"), ("indexer", "/indexer/health")]:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get(f"{base}{path}")
+                results[name] = {"status": r.status_code, "body": r.text[:200]}
+        except Exception as e:
+            results[name] = {"error": type(e).__name__, "detail": str(e)[:200]}
+    return results
+
+
+if __name__ == "__main__":
+    # Standalone reverse-proxy mode (local dev only)
+    port = int(os.getenv("PORT", 8080))
+    logger.info("Gateway (standalone) starting on port %d", port)
+
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
+    async def proxy(request: Request, path: str):
+        if path.startswith("indexer/") or path == "indexer":
+            target = INDEXER_ORIGIN
+            forward_path = path[len("indexer"):].lstrip("/")
+        else:
+            target = AUCTIONEER_ORIGIN
+            forward_path = path
+        url = f"{target}/{forward_path}"
+        if request.url.query:
+            url += f"?{request.url.query}"
+        skip = {"host", "content-length", "transfer-encoding", "connection"}
+        headers = {k: v for k, v in request.headers.items() if k.lower() not in skip}
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.request(request.method, url, headers=headers, content=await request.body())
+            resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in {"transfer-encoding", "connection"}}
+            return Response(content=resp.content, status_code=resp.status_code, headers=resp_headers)
+        except httpx.ConnectError:
+            return Response(content=b'{"error":"agent unavailable"}', status_code=503, media_type="application/json")
+
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+
 
 
 @app.get("/health")

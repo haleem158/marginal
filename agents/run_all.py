@@ -1,8 +1,11 @@
 """
-run_all.py — Run all MARGINAL API services in a single asyncio event loop.
+run_all.py — Run all MARGINAL API services in a single uvicorn server.
 
-In RUN_MODE=api (default on Railway): gateway + auctioneer + memory indexer
-In RUN_MODE=full: same + executor/auditor subprocesses
+Mounts auctioneer and indexer as FastAPI sub-applications on the gateway:
+  /          → auctioneer routes
+  /indexer/  → indexer routes
+
+One port ($PORT / 8080), no inter-process communication, no port conflicts.
 """
 import asyncio
 import logging
@@ -25,7 +28,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("marginal.run_all")
 
-extra_procs = []  # executor/auditor subprocesses in full mode
+extra_procs = []
 
 
 def discover_executor_indices() -> list[int]:
@@ -45,27 +48,54 @@ def launch_subprocess(script: str, label: str, *args: str) -> subprocess.Popen:
     return proc
 
 
-async def api_main():
-    """Run gateway + auctioneer + indexer in one event loop — no subprocess issues."""
+async def main():
     from auctioneer import AuctioneerAgent
     from memory_indexer import MemoryIndexerAgent
-    import gateway as gw_module
     import uvicorn
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
 
     logger.info("Initialising AuctioneerAgent...")
     auctioneer = AuctioneerAgent()
     logger.info("Initialising MemoryIndexerAgent...")
     indexer = MemoryIndexerAgent()
 
-    port = int(os.getenv("PORT", 8080))
-    gw_config = uvicorn.Config(gw_module.app, host="0.0.0.0", port=port, log_level="info")
-    gw_server = uvicorn.Server(gw_config)
+    # Fetch initial block non-blockingly
+    loop = asyncio.get_event_loop()
+    try:
+        indexer._last_block = await loop.run_in_executor(
+            None, lambda: indexer.w3.eth.block_number
+        )
+        logger.info("Memory Indexer starting at block %d", indexer._last_block)
+    except Exception as e:
+        logger.warning("Could not fetch initial block: %s", e)
 
-    logger.info("Launching: gateway :%d | auctioneer :8000 | indexer :8001", port)
+    # ── Single combined FastAPI app ──────────────────────────────────────────
+    combined = FastAPI(title="MARGINAL Backend")
+    combined.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Mount auctioneer routes at root
+    combined.mount("/", auctioneer.app)
+
+    # Build indexer sub-app and mount at /indexer
+    indexer_app = indexer.build_api()
+    combined.mount("/indexer", indexer_app)
+
+    port = int(os.getenv("PORT", 8080))
+    logger.info("Starting single uvicorn on :%d", port)
+
+    config = uvicorn.Config(combined, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+
+    # Run uvicorn + indexer event loop concurrently
     await asyncio.gather(
-        auctioneer.run(),
-        indexer.run(),
-        gw_server.serve(),
+        server.serve(),
+        indexer._event_loop(),
     )
 
 
@@ -80,16 +110,12 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, shutdown)
 
     run_mode = os.getenv("RUN_MODE", "full").lower()
-
     if run_mode == "full":
         for idx in discover_executor_indices():
             extra_procs.append(launch_subprocess("executor.py", f"Executor #{idx}", str(idx)))
         extra_procs.append(launch_subprocess("auditor.py", "Auditor"))
-        logger.info("Full mode: launched %d extra processes", len(extra_procs))
-    else:
-        logger.info("API-only mode (no executor/auditor)")
 
-    asyncio.run(api_main())
+    asyncio.run(main())
 
 
 

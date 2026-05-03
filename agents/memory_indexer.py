@@ -53,7 +53,7 @@ class MemoryIndexerAgent(BaseAgent):
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     async def run(self):
-        # Fetch current block non-blockingly so we don't miss events
+        # Fetch current block non-blockingly
         loop = asyncio.get_event_loop()
         try:
             self._last_block = await loop.run_in_executor(None, lambda: self.w3.eth.block_number)
@@ -312,14 +312,12 @@ class MemoryIndexerAgent(BaseAgent):
 
     # ── Cache API (for frontend) ──────────────────────────────────────────────
 
-    async def _serve_cache_api(self):
+    def build_api(self):
         """
-        Lightweight FastAPI serving the indexed state for the frontend dashboard.
-        Also serves as local Storage backend (KV + Log) when 0G Storage is unreachable.
-        Runs on port 8001.
+        Build and return the FastAPI app for the indexer cache API.
+        Call this once, then mount the returned app into the parent gateway.
         """
         from fastapi import FastAPI, HTTPException, Request
-        import uvicorn
         import uuid
 
         api = FastAPI(title="MARGINAL Memory Indexer Cache", version="1.0.0")
@@ -329,7 +327,6 @@ class MemoryIndexerAgent(BaseAgent):
             return {"status": "ok", "agent": "memory_indexer"}
 
         # ── Storage backend (KV + Log) ─────────────────────────────────────
-        # Used by executor (write) and auditor (read) when 0G Storage is offline.
         # Pointer format: "mgidx:<uuid8>"
         _storage: dict[str, dict] = {}
 
@@ -349,8 +346,6 @@ class MemoryIndexerAgent(BaseAgent):
                 raise HTTPException(status_code=404, detail="Not found")
             return data
 
-        # ── Agent cache API ────────────────────────────────────────────────
-
         @api.get("/agents")
         async def get_agents():
             return list(self._agent_state_cache.values())
@@ -361,7 +356,6 @@ class MemoryIndexerAgent(BaseAgent):
                 return {}
             state = self._agent_state_cache.get(address)
             if not state:
-                # Try fetching from chain directly
                 await self._refresh_agent_kv(address)
                 state = self._agent_state_cache.get(address)
             return state or {}
@@ -372,8 +366,7 @@ class MemoryIndexerAgent(BaseAgent):
 
         @api.get("/agents/{address}/history")
         async def get_agent_history(address: str):
-            """Per-agent efficiency score history derived from the task log."""
-            history = [
+            return [
                 {
                     "epoch":     i,
                     "score":     entry["efficiency_score"] / 10000,
@@ -383,33 +376,22 @@ class MemoryIndexerAgent(BaseAgent):
                 for i, entry in enumerate(self._task_log_cache)
                 if entry.get("executor", "").lower() == address.lower()
             ]
-            return history
 
         @api.get("/metrics")
         async def get_metrics():
-            """Aggregate network metrics for the dashboard."""
             agents = list(self._agent_state_cache.values())
             scores = [a["efficiency_score"] for a in agents if "efficiency_score" in a]
             avg_eff = (sum(scores) / len(scores) / 10000) if scores else 0.0
-
-            total_compute = sum(
-                e.get("compute_used", 0) for e in self._task_log_cache
-            )
-            total_rewards = sum(
-                int(a.get("lifetime_rewards_wei", 0)) for a in agents
-            )
-            total_slashed = sum(
-                int(a.get("lifetime_slashed_wei", 0)) for a in agents
-            )
-            # tasks in current epoch (last 200 entries or all if fewer)
-            epoch_window = self._task_log_cache[-200:]
+            total_compute = sum(e.get("compute_used", 0) for e in self._task_log_cache)
+            total_rewards = sum(int(a.get("lifetime_rewards_wei", 0)) for a in agents)
+            total_slashed = sum(int(a.get("lifetime_slashed_wei", 0)) for a in agents)
             return {
-                "avg_efficiency":      round(avg_eff, 4),
-                "total_compute_used":  total_compute,
-                "total_rewards_a0gi":  round(total_rewards / 1e18, 6),
-                "total_slashed_a0gi":  round(total_slashed / 1e18, 6),
-                "active_agents":       len(agents),
-                "tasks_this_epoch":    len(epoch_window),
+                "avg_efficiency":     round(avg_eff, 4),
+                "total_compute_used": total_compute,
+                "total_rewards_a0gi": round(total_rewards / 1e18, 6),
+                "total_slashed_a0gi": round(total_slashed / 1e18, 6),
+                "active_agents":      len(agents),
+                "tasks_this_epoch":   len(self._task_log_cache[-200:]),
             }
 
         @api.get("/stats")
@@ -426,11 +408,17 @@ class MemoryIndexerAgent(BaseAgent):
                 "last_block":            self._last_block,
             }
 
+        return api
+
+    async def _serve_cache_api(self):
+        """Legacy: run indexer API as a standalone uvicorn (used when running memory_indexer.py directly)."""
+        import uvicorn
+        api = self.build_api()
         config = uvicorn.Config(
             api,
             host=os.getenv("AGENT_BIND_HOST", "127.0.0.1"),
             port=8001,
-            log_level="warning"
+            log_level="warning",
         )
         server = uvicorn.Server(config)
         await server.serve()
