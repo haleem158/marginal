@@ -53,6 +53,20 @@ async def health():
     return {"status": "ok", "auctioneer": auctioneer_ok, "indexer": indexer_ok}
 
 
+@app.get("/probe")
+async def probe():
+    """Diagnostic: return raw connection result for each agent port."""
+    results = {}
+    for name, origin in [("auctioneer", AUCTIONEER_ORIGIN), ("indexer", INDEXER_ORIGIN)]:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.get(f"{origin}/health")
+                results[name] = {"status": r.status_code, "body": r.text[:200]}
+        except Exception as e:
+            results[name] = {"error": type(e).__name__, "detail": str(e)[:300]}
+    return results
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str):
     """Transparent reverse proxy — routes by path prefix."""
