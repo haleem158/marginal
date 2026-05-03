@@ -51,14 +51,11 @@ class BaseAgent:
         self.logger = logging.getLogger(f"marginal.{role}")
 
         # ── Web3 ─────────────────────────────────────────────────────────────
-        self.w3 = Web3(Web3.HTTPProvider(cfg.og_rpc_url))
+        self.w3 = Web3(Web3.HTTPProvider(cfg.og_rpc_url, request_kwargs={"timeout": 5}))
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        if not self.w3.is_connected():
-            self.logger.warning(
-                "Could not verify connection to 0G Chain at %s — will retry on first use.",
-                cfg.og_rpc_url,
-            )
+        # NOTE: do NOT call w3.is_connected() here — it makes a synchronous HTTP
+        # request that can block __init__ for 30s, preventing uvicorn from starting.
+        self.logger.info("Web3 provider configured: %s", cfg.og_rpc_url)
 
         self.account = Account.from_key(cfg.private_key)
         self.logger.info("Agent wallet: %s", self.account.address)
