@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from web3 import Web3
-from web3.middleware import ExtraDataToPOAMiddleware
+from web3.middleware import geth_poa_middleware
 from eth_account import Account
 import openai
 
@@ -52,7 +52,7 @@ class BaseAgent:
 
         # ── Web3 ─────────────────────────────────────────────────────────────
         self.w3 = Web3(Web3.HTTPProvider(cfg.og_rpc_url))
-        self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         if not self.w3.is_connected():
             self.logger.warning(
