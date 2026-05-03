@@ -83,7 +83,7 @@ class AuctioneerAgent(BaseAgent):
         # ── CORS: allow the frontend origin (configurable) ────────────────────
         allowed_origins = os.getenv(
             "CORS_ALLOWED_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000"
+            "*"
         ).split(",")
         self.app.add_middleware(
             CORSMiddleware,

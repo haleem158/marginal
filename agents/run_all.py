@@ -52,8 +52,6 @@ async def main():
     from auctioneer import AuctioneerAgent
     from memory_indexer import MemoryIndexerAgent
     import uvicorn
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
 
     logger.info("Initialising AuctioneerAgent...")
     auctioneer = AuctioneerAgent()
@@ -70,26 +68,15 @@ async def main():
     except Exception as e:
         logger.warning("Could not fetch initial block: %s", e)
 
-    # ── Single combined FastAPI app ──────────────────────────────────────────
-    combined = FastAPI(title="MARGINAL Backend")
-    combined.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    # Mount auctioneer routes at root
-    combined.mount("/", auctioneer.app)
-
-    # Build indexer sub-app and mount at /indexer
+    # Build indexer FastAPI sub-app and include its routes into auctioneer.app
+    # under the /indexer prefix.  include_router() is flat and never conflicts.
     indexer_app = indexer.build_api()
-    combined.mount("/indexer", indexer_app)
+    auctioneer.app.include_router(indexer_app.router, prefix="/indexer", tags=["indexer"])
 
     port = int(os.getenv("PORT", 8080))
-    logger.info("Starting single uvicorn on :%d", port)
+    logger.info("Starting single uvicorn on :%d (auctioneer + indexer)", port)
 
-    config = uvicorn.Config(combined, host="0.0.0.0", port=port, log_level="info")
+    config = uvicorn.Config(auctioneer.app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(config)
 
     # Run uvicorn + indexer event loop concurrently
