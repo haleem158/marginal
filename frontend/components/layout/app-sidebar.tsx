@@ -36,68 +36,91 @@ const secondaryItems = [
 
 const WALLET = "0x7f3a...c291";
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  open: boolean;
+  onToggle: () => void;
+}
+
+export function AppSidebar({ open, onToggle }: AppSidebarProps) {
   const [expanded, setExpanded] = useState(true);
   const [accountOpen, setAccountOpen] = useState(false);
   const pathname = usePathname();
 
-  return (
-    <motion.aside
-      animate={{ width: expanded ? 240 : 64 }}
-      transition={{ duration: 0.25, ease: "easeInOut" }}
-      onMouseEnter={() => setExpanded(true)}
-      onMouseLeave={() => setExpanded(false)}
-      className="relative flex flex-col h-screen bg-[#0F0F0F] border-r border-white/6 overflow-hidden shrink-0 z-40"
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/6">
-        <div className="relative shrink-0">
-          <Logo size={32} color="white" />
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#00FF88]"
-            style={{ animation: 'pulse-live 2s ease-in-out infinite' }} />
-        </div>
-        <AnimatePresence initial={false}>
-          {expanded && (
-            <motion.span
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.18 }}
-              className="font-mono font-black text-sm tracking-widest text-[#F5F5F5] uppercase"
-            >
-              MARGINAL
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-      {/* Primary nav */}
-      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-          return (
-            <Link key={item.href} href={item.href}>
-              <motion.div
-                className={cn(
-                  "relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors duration-150",
-                  isActive
-                    ? "bg-[#00C2FF]/10 text-[#00C2FF]"
-                    : "text-[#888888] hover:text-[#F5F5F5] hover:bg-white/4"
-                )}
+  return (
+    <>
+      {/* Mobile overlay */}
+      {isMobile && open && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={onToggle}
+        />
+      )}
+
+      <motion.aside
+        animate={{
+          width: isMobile ? (open ? 240 : 0) : (expanded ? 240 : 64),
+          x: isMobile ? (open ? 0 : -240) : 0
+        }}
+        transition={{ duration: 0.25, ease: "easeInOut" }}
+        onMouseEnter={() => !isMobile && setExpanded(true)}
+        onMouseLeave={() => !isMobile && setExpanded(false)}
+        className={cn(
+          "relative flex flex-col h-screen bg-[#0F0F0F] border-r border-white/6 overflow-hidden shrink-0 z-40",
+          isMobile && "absolute left-0 top-0"
+        )}
+      >
+        {/* Brand */}
+        <div className="flex items-center gap-3 px-4 py-5 border-b border-white/6">
+          <div className="relative shrink-0">
+            <Logo size={32} color="white" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#00FF88]"
+              style={{ animation: 'pulse-live 2s ease-in-out infinite' }} />
+          </div>
+          <AnimatePresence initial={false}>
+            {(expanded || (isMobile && open)) && (
+              <motion.span
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.18 }}
+                className="font-mono font-black text-sm tracking-widest text-[#F5F5F5] uppercase"
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="sidebar-active"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#00C2FF]"
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                )}
-                <item.icon size={18} className="shrink-0" />
-                <AnimatePresence initial={false}>
-                  {expanded && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -6 }}
-                      animate={{ opacity: 1, x: 0 }}
+                MARGINAL
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Primary nav */}
+        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            return (
+              <Link key={item.href} href={item.href}>
+                <motion.div
+                  className={cn(
+                    "relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors duration-150",
+                    isActive
+                      ? "bg-[#00C2FF]/10 text-[#00C2FF]"
+                      : "text-[#888888] hover:text-[#F5F5F5] hover:bg-white/4"
+                  )}
+                  onClick={() => isMobile && onToggle()}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-active"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#00C2FF]"
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                  <item.icon size={18} className="shrink-0" />
+                  <AnimatePresence initial={false}>
+                    {(expanded || (isMobile && open)) && (
+                      <motion.span
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -6 }}
                       transition={{ duration: 0.15 }}
                       className="text-sm font-medium whitespace-nowrap"
@@ -140,10 +163,11 @@ export function AppSidebar() {
                     ? "bg-[#00C2FF]/10 text-[#00C2FF]"
                     : "text-[#555555] hover:text-[#F5F5F5] hover:bg-white/4"
                 )}
+                onClick={() => isMobile && onToggle()}
               >
                 <item.icon size={18} className="shrink-0" />
                 <AnimatePresence initial={false}>
-                  {expanded && (
+                  {(expanded || (isMobile && open)) && (
                     <motion.span
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -167,7 +191,7 @@ export function AppSidebar() {
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#555555] hover:text-[#F5F5F5] hover:bg-white/4 transition-colors duration-150 cursor-pointer">
             <Settings size={18} className="shrink-0" />
             <AnimatePresence initial={false}>
-              {expanded && (
+              {(expanded || (isMobile && open)) && (
                 <motion.span
                   initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -193,7 +217,7 @@ export function AppSidebar() {
             <span className="text-[10px] font-mono font-bold text-[#00C2FF]">0x</span>
           </div>
           <AnimatePresence initial={false}>
-            {expanded && (
+            {(expanded || (isMobile && open)) && (
               <motion.div
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -210,13 +234,13 @@ export function AppSidebar() {
               </motion.div>
             )}
           </AnimatePresence>
-          {expanded && (
+          {(expanded || (isMobile && open)) && (
             <ChevronDown size={14} className="text-[#555555] shrink-0" />
           )}
         </button>
 
         <AnimatePresence>
-          {accountOpen && expanded && (
+          {accountOpen && (expanded || (isMobile && open)) && (
             <motion.div
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
