@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { FloatingActionMenu } from "@/components/ui/floating-action-menu";
 import { SmokeBackground } from "@/components/ui/spooky-smoke-animation";
@@ -16,7 +14,6 @@ const SMOKE_ENABLED = true;
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLanding = pathname === "/";
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <Providers>
@@ -31,9 +28,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <div className="relative z-10">{children}</div>
       ) : (
         <div className="relative z-10 flex h-screen overflow-hidden">
-          <AppSidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+            <TopBar />
             <main className="flex-1 overflow-y-auto">{children}</main>
           </div>
           <FloatingActionMenu />

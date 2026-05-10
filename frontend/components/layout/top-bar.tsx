@@ -1,6 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { Bell, Search, Menu } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { LiveIndicator } from "@/components/shared/live-indicator";
 
@@ -15,23 +15,15 @@ const pageTitles: Record<string, string> = {
   "/settings": "Settings",
 };
 
-interface TopBarProps {
-  onMenuClick?: () => void;
-}
+interface TopBarProps {}
 
-export function TopBar({ onMenuClick }: TopBarProps) {
+export function TopBar({}: TopBarProps) {
   const pathname = usePathname();
   const title = Object.entries(pageTitles).find(([k]) => pathname.startsWith(k))?.[1] ?? "MARGINAL";
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-white/6 bg-[#080808]/80 backdrop-blur-md shrink-0">
       <div className="flex items-center gap-3">
-        <button
-          onClick={onMenuClick}
-          className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/4 border border-white/8 text-[#888888] hover:text-[#F5F5F5] hover:border-white/12 transition-colors"
-        >
-          <Menu size={16} />
-        </button>
         <h1 className="text-sm font-semibold text-[#F5F5F5]">{title}</h1>
         {pathname.startsWith("/auctions") && (
           <LiveIndicator status="live" label="LIVE" />

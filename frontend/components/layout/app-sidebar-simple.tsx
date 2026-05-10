@@ -1,0 +1,175 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Gavel,
+  Bot,
+  Plus,
+  UserCircle,
+  FileClock,
+  Database,
+  BarChart2,
+  Settings,
+  ChevronDown,
+  LogOut,
+} from "lucide-react";
+import { Logo } from "@/components/ui/logo";
+import { cn } from "@/lib/utils";
+import { LiveIndicator } from "@/components/shared/live-indicator";
+
+const navItems = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Live Auctions", href: "/auctions", icon: Gavel, badge: 12 },
+  { label: "Agent Registry", href: "/agents", icon: Bot },
+  { label: "Submit Task", href: "/tasks", icon: Plus },
+  { label: "My Agents", href: "/agents/my", icon: UserCircle },
+  { label: "History", href: "/history", icon: FileClock },
+];
+
+const secondaryItems = [
+  { label: "0G Storage", href: "/storage", icon: Database },
+  { label: "Analytics", href: "/analytics", icon: BarChart2 },
+];
+
+const WALLET = "0x7f3a...c291";
+
+export function AppSidebar() {
+  const [expanded, setExpanded] = useState(true);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const pathname = usePathname();
+
+  return (
+    <aside
+      className="relative flex flex-col w-60 h-screen bg-[#0F0F0F] border-r border-white/6 overflow-hidden shrink-0 z-40"
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
+      {/* Brand */}
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/6">
+        <div className="relative shrink-0">
+          <Logo size={32} color="white" />
+          <span
+            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#00FF88]"
+            style={{ animation: "pulse-live 2s ease-in-out infinite" }}
+          />
+        </div>
+        {expanded && (
+          <span className="font-mono font-black text-sm tracking-widest text-[#F5F5F5] uppercase">
+            MARGINAL
+          </span>
+        )}
+      </div>
+
+      {/* Primary nav */}
+      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+          return (
+            <Link key={item.href} href={item.href}>
+              <div
+                className={cn(
+                  "relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors duration-150",
+                  isActive
+                    ? "bg-[#00C2FF]/10 text-[#00C2FF]"
+                    : "text-[#888888] hover:text-[#F5F5F5] hover:bg-white/4"
+                )}
+              >
+                {isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#00C2FF]" />
+                )}
+                <item.icon size={18} className="shrink-0" />
+                {expanded && (
+                  <span className="text-sm font-medium whitespace-nowrap">
+                    {item.label}
+                  </span>
+                )}
+                {item.badge && expanded && (
+                  <span className="ml-auto flex items-center gap-1">
+                    <LiveIndicator status="live" />
+                    <span className="text-[11px] font-mono text-[#00FF88] font-semibold">
+                      {item.badge}
+                    </span>
+                  </span>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+
+        <div className="my-3 border-t border-white/6" />
+
+        {secondaryItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href}>
+              <div
+                className={cn(
+                  "relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors duration-150",
+                  isActive
+                    ? "bg-[#00C2FF]/10 text-[#00C2FF]"
+                    : "text-[#555555] hover:text-[#F5F5F5] hover:bg-white/4"
+                )}
+              >
+                <item.icon size={18} className="shrink-0" />
+                {expanded && (
+                  <span className="text-sm font-medium whitespace-nowrap">
+                    {item.label}
+                  </span>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+
+        <div className="my-3 border-t border-white/6" />
+
+        <Link href="/settings">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#555555] hover:text-[#F5F5F5] hover:bg-white/4 transition-colors duration-150 cursor-pointer">
+            <Settings size={18} className="shrink-0" />
+            {expanded && (
+              <span className="text-sm font-medium whitespace-nowrap">
+                Settings
+              </span>
+            )}
+          </div>
+        </Link>
+      </nav>
+
+      {/* Account */}
+      <div className="border-t border-white/6 p-2">
+        <button
+          onClick={() => setAccountOpen(!accountOpen)}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/4 transition-colors duration-150"
+        >
+          <div className="w-8 h-8 rounded-full bg-[#00C2FF]/20 border border-[#00C2FF]/30 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-mono font-bold text-[#00C2FF]">0x</span>
+          </div>
+          {expanded && (
+            <div className="flex-1 min-w-0 text-left">
+              <div className="text-xs font-mono text-[#F5F5F5] truncate">{WALLET}</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] text-[#00FF88] font-mono">Score: 0.94</span>
+                <span className="text-[10px] text-[#555555] font-mono">·</span>
+                <span className="text-[10px] text-[#888888] font-mono">12,400 A0GI</span>
+              </div>
+            </div>
+          )}
+          {expanded && (
+            <ChevronDown size={14} className="text-[#555555] shrink-0" />
+          )}
+        </button>
+
+        {accountOpen && expanded && (
+          <div className="mt-1 p-1 rounded-lg bg-[#141414] border border-white/8">
+            <button className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[#888888] hover:text-[#FF4455] hover:bg-[#FF4455]/8 transition-colors duration-150">
+              <LogOut size={14} />
+              <span>Disconnect</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
