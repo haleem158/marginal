@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { AppSidebar } from "@/components/layout/app-sidebar-simple";
 import { TopBar } from "@/components/layout/top-bar";
 import { FloatingActionMenu } from "@/components/ui/floating-action-menu";
 import { SmokeBackground } from "@/components/ui/spooky-smoke-animation";
@@ -28,6 +29,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <div className="relative z-10">{children}</div>
       ) : (
         <div className="relative z-10 flex h-screen overflow-hidden">
+          <AppSidebar />
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <TopBar />
             <main className="flex-1 overflow-y-auto">{children}</main>
